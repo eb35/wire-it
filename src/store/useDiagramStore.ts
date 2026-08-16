@@ -3,16 +3,17 @@ import {
   countCablesBetween,
   createId,
   initialWaypoints,
-  insertWaypoint,
   KIND_DEFAULTS,
+  nextLocationCode,
+  nextPort,
   pickHandles,
-  removeWaypoint,
-  updateWaypoint,
 } from "../domain";
 import type {
+  Cable,
   CableTypeId,
   DeviceType,
   Library,
+  Location,
   LocationKind,
   Point,
   Project,
@@ -42,7 +43,10 @@ type DiagramState = {
   switchDrawing: (id: string) => void;
   deleteDrawing: (id: string) => void;
   addLocation: (kind: LocationKind, position: Point) => void;
-  updateLocation: (id: string, patch: { label?: string; device?: DeviceType }) => void;
+  updateLocation: (
+    id: string,
+    patch: { label?: string; device?: DeviceType; code?: string },
+  ) => void;
   moveNode: (id: string, position: Point) => void;
   deleteLocation: (id: string) => void;
   addNote: (position: Point) => void;
@@ -50,20 +54,54 @@ type DiagramState = {
   deleteNote: (id: string) => void;
   beginConnect: (type: CableTypeId) => void;
   clickLocationForConnect: (locationId: string) => void;
+  connectByHandles: (input: {
+    sourceId: string;
+    targetId: string;
+    sourceHandle: string;
+    targetHandle: string;
+  }) => void;
   cancelConnect: () => void;
   updateCable: (
     id: string,
-    patch: { label?: string; type?: CableTypeId; color?: WireColorId },
+    patch: {
+      label?: string;
+      type?: CableTypeId;
+      color?: WireColorId;
+      sourcePort?: string;
+      targetPort?: string;
+    },
   ) => void;
   setWaypoints: (id: string, waypoints: Point[]) => void;
-  addBend: (id: string, point: Point, start: Point, end: Point) => void;
-  moveBend: (id: string, index: number, point: Point) => void;
-  removeBend: (id: string, index: number) => void;
+  resetRoute: (id: string) => void;
   deleteCable: (id: string) => void;
   setSelection: (selection: Selection | null) => void;
   deleteSelection: () => void;
   importProject: (project: Project) => void;
 };
+
+function makeCable(
+  project: Project,
+  source: Location,
+  target: Location,
+  sourceHandle: string,
+  targetHandle: string,
+  type: CableTypeId,
+): Cable {
+  const existing = countCablesBetween(project.cables, source.id, target.id);
+  return {
+    id: createId("cab"),
+    type,
+    source: source.id,
+    target: target.id,
+    sourceHandle,
+    targetHandle,
+    sourcePort: nextPort(source.id, project.cables),
+    targetPort: nextPort(target.id, project.cables),
+    label: "",
+    color: "sheath",
+    waypoints: initialWaypoints(source, target, existing),
+  };
+}
 
 const loaded = loadWorkspace();
 
@@ -141,6 +179,7 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
       id: createId("loc"),
       kind,
       label: defaults.label,
+      code: nextLocationCode(project.locations),
       device: defaults.device,
       position,
     };
@@ -244,21 +283,38 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
     const target = project.locations.find((item) => item.id === locationId);
     if (!source || !target) return;
     const handles = pickHandles(source, target, project.cables);
-    const existing = countCablesBetween(project.cables, source.id, target.id);
-    const cable = {
-      id: createId("cab"),
-      type: connectType,
-      source: source.id,
-      target: target.id,
-      sourceHandle: handles.sourceHandle,
-      targetHandle: handles.targetHandle,
-      label: "",
-      color: "sheath" as const,
-      waypoints: initialWaypoints(source, target, existing),
-    };
+    const cable = makeCable(project, source, target, handles.sourceHandle, handles.targetHandle, connectType);
     set({
       ...persist(library, { ...project, cables: [...project.cables, cable] }),
       connectFrom: null,
+      selection: { kind: "cable", id: cable.id },
+    });
+  },
+
+  connectByHandles: ({ sourceId, targetId, sourceHandle, targetHandle }) => {
+    const { library, project, connectType } = get();
+    if (sourceId === targetId) return;
+    const source = project.locations.find((item) => item.id === sourceId);
+    const target = project.locations.find((item) => item.id === targetId);
+    if (!source || !target) return;
+    const already = project.cables.some(
+      (cable) =>
+        cable.source === sourceId &&
+        cable.target === targetId &&
+        cable.sourceHandle === sourceHandle &&
+        cable.targetHandle === targetHandle,
+    );
+    if (already) return;
+    const cable = makeCable(
+      project,
+      source,
+      target,
+      sourceHandle,
+      targetHandle,
+      connectType ?? "12/2",
+    );
+    set({
+      ...persist(library, { ...project, cables: [...project.cables, cable] }),
       selection: { kind: "cable", id: cable.id },
     });
   },
@@ -285,22 +341,15 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
     );
   },
 
-  addBend: (id, point, start, end) => {
-    const cable = get().project.cables.find((item) => item.id === id);
+  resetRoute: (id) => {
+    const { project } = get();
+    const cable = project.cables.find((item) => item.id === id);
     if (!cable) return;
-    get().setWaypoints(id, insertWaypoint(cable.waypoints, start, end, point));
-  },
-
-  moveBend: (id, index, point) => {
-    const cable = get().project.cables.find((item) => item.id === id);
-    if (!cable) return;
-    get().setWaypoints(id, updateWaypoint(cable.waypoints, index, point));
-  },
-
-  removeBend: (id, index) => {
-    const cable = get().project.cables.find((item) => item.id === id);
-    if (!cable) return;
-    get().setWaypoints(id, removeWaypoint(cable.waypoints, index));
+    const source = project.locations.find((item) => item.id === cable.source);
+    const target = project.locations.find((item) => item.id === cable.target);
+    if (!source || !target) return;
+    const existing = countCablesBetween(project.cables, source.id, target.id);
+    get().setWaypoints(id, initialWaypoints(source, target, Math.max(0, existing - 1)));
   },
 
   deleteCable: (id) => {

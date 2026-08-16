@@ -7,6 +7,7 @@ import { useDiagramStore } from "../../store/useDiagramStore";
 export type LocationNodeData = {
   kind: LocationKind;
   label: string;
+  code: string;
   device: DeviceType;
 };
 
@@ -72,8 +73,11 @@ export function LocationNode({ id, data, selected }: NodeProps<Node<LocationNode
       <SideHandles position={Position.Right} side="r" />
       <SideHandles position={Position.Bottom} side="b" />
       <SideHandles position={Position.Left} side="l" />
-      <div className="muted text-[10px] uppercase tracking-wide text-zinc-500">
-        {KIND_LABEL[data.kind]}
+      <div className="muted flex items-center justify-between text-[10px] uppercase tracking-wide text-zinc-500">
+        <span>{KIND_LABEL[data.kind]}</span>
+        <span className="rounded bg-zinc-800 px-1.5 font-mono text-[11px] text-zinc-200">
+          {data.code}
+        </span>
       </div>
       <div className="truncate text-sm font-semibold">{data.label}</div>
       <div className="muted truncate text-xs text-zinc-400">{deviceLabel(data.device)}</div>

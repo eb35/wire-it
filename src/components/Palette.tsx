@@ -41,7 +41,8 @@ export function Palette() {
           Cables
         </h2>
         <p className="text-xs text-zinc-500">
-          Click a type, then two boxes. Esc cancels.
+          Click a type, then drag from a node on one box to a node on another. Or
+          click two boxes. Esc cancels.
         </p>
         <div className="flex flex-wrap gap-1.5">
           {CABLE_TYPE_IDS.map((type) => (

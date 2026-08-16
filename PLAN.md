@@ -42,7 +42,9 @@ A working dark-mode editor you can run locally:
 - Device types on boxes (outlet, GFCI, single-pole, 3-way, 4-way, light)
 - Typed cables (`14/2` through `10/3`) between boxes; several cables can land on one box
 - On-wire text repeats along the run: type always, plus an optional user label
-- Draggable bend points (double-click the cable to add a bend)
+- Orthogonal (90°) cable routes with draggable pressure points
+- End labels at each box (`A1` / `To B2`) plus repeating type along the run
+- Draw a cable by dragging from a node on one box to a node on another
 - Wire color: default by gauge, plus a small palette
 - Several local drawings (no account) with autosave
 - Export / import JSON; export PNG in light or dark

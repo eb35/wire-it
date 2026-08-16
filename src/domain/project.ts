@@ -1,5 +1,6 @@
 import { CABLE_TYPE_IDS } from "./catalog";
 import { createId } from "./id";
+import { nextLocationCode } from "./ports";
 import type {
   Cable,
   CableTypeId,
@@ -66,7 +67,8 @@ export function parseProject(raw: unknown): Project {
     throw new Error("This drawing is missing locations, cables, or notes.");
   }
 
-  const locations: Location[] = raw.locations.map((item, index) => {
+  const locations: Location[] = [];
+  raw.locations.forEach((item, index) => {
     if (
       !isRecord(item) ||
       typeof item.id !== "string" ||
@@ -77,13 +79,17 @@ export function parseProject(raw: unknown): Project {
     ) {
       throw new Error(`Location ${index + 1} is invalid.`);
     }
-    return {
+    locations.push({
       id: item.id,
       kind: item.kind as LocationKind,
       label: item.label,
+      code:
+        typeof item.code === "string" && item.code.trim()
+          ? item.code.trim().toUpperCase()
+          : nextLocationCode(locations),
       device: item.device as DeviceType,
       position: item.position,
-    };
+    });
   });
 
   const locationIds = new Set(locations.map((location) => location.id));
@@ -96,7 +102,6 @@ export function parseProject(raw: unknown): Project {
       typeof item.target !== "string" ||
       typeof item.sourceHandle !== "string" ||
       typeof item.targetHandle !== "string" ||
-      typeof item.label !== "string" ||
       !WIRE_COLOR_IDS.has(item.color as WireColorId) ||
       !Array.isArray(item.waypoints) ||
       !item.waypoints.every(isPoint)
@@ -113,7 +118,15 @@ export function parseProject(raw: unknown): Project {
       target: item.target,
       sourceHandle: item.sourceHandle,
       targetHandle: item.targetHandle,
-      label: item.label,
+      sourcePort:
+        typeof item.sourcePort === "string" && item.sourcePort.trim()
+          ? item.sourcePort.trim()
+          : "1",
+      targetPort:
+        typeof item.targetPort === "string" && item.targetPort.trim()
+          ? item.targetPort.trim()
+          : "1",
+      label: typeof item.label === "string" ? item.label : "",
       color: item.color as WireColorId,
       waypoints: item.waypoints,
     };

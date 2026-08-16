@@ -34,6 +34,7 @@ export type Location = {
   id: string;
   kind: LocationKind;
   label: string;
+  code: string;
   device: DeviceType;
   position: Point;
 };
@@ -45,6 +46,8 @@ export type Cable = {
   target: string;
   sourceHandle: string;
   targetHandle: string;
+  sourcePort: string;
+  targetPort: string;
   label: string;
   color: WireColorId;
   waypoints: Point[];

@@ -1,11 +1,14 @@
 import {
   applyNodeChanges,
   Background,
+  ConnectionLineType,
+  ConnectionMode,
   Controls,
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
+  type Connection,
   type Edge,
   type Node,
   type NodeChange,
@@ -26,6 +29,7 @@ function toNodes(
     id: string;
     kind: LocationNodeData["kind"];
     label: string;
+    code: string;
     device: LocationNodeData["device"];
     position: Point;
   }[],
@@ -39,6 +43,7 @@ function toNodes(
       data: {
         kind: location.kind,
         label: location.label,
+        code: location.code,
         device: location.device,
       },
     })),
@@ -61,7 +66,7 @@ function DiagramCanvasInner() {
   const setSelection = useDiagramStore((state) => state.setSelection);
   const deleteSelection = useDiagramStore((state) => state.deleteSelection);
   const cancelConnect = useDiagramStore((state) => state.cancelConnect);
-  const addBend = useDiagramStore((state) => state.addBend);
+  const connectByHandles = useDiagramStore((state) => state.connectByHandles);
   const { screenToFlowPosition } = useReactFlow();
 
   const [nodes, setNodes] = useState<Node[]>(() =>
@@ -128,8 +133,8 @@ function DiagramCanvasInner() {
       {connectType ? (
         <div className="pointer-events-none absolute left-3 top-3 z-10 rounded border border-sky-700 bg-zinc-950/90 px-2 py-1 text-xs text-sky-300">
           {connectFrom
-            ? `Click another box to finish the ${connectType} run — Esc to cancel`
-            : `Click a box to start a ${connectType} run — Esc to cancel`}
+            ? `Click another box, or drag node-to-node, to finish the ${connectType} run — Esc to cancel`
+            : `Drag from a node to another box, or click two boxes, for a ${connectType} run — Esc to cancel`}
         </div>
       ) : null}
       <ReactFlow
@@ -148,20 +153,20 @@ function DiagramCanvasInner() {
         onEdgeClick={(_event, edge) => {
           setSelection({ kind: "cable", id: edge.id });
         }}
-        onEdgeDoubleClick={(event, edge) => {
-          const cable = project.cables.find((item) => item.id === edge.id);
-          if (!cable) return;
-          const source = project.locations.find((item) => item.id === cable.source);
-          const target = project.locations.find((item) => item.id === cable.target);
-          if (!source || !target) return;
-          const point = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-          addBend(
-            edge.id,
-            point,
-            { x: source.position.x + 74, y: source.position.y + 40 },
-            { x: target.position.x + 74, y: target.position.y + 40 },
-          );
+        onConnect={(connection: Connection) => {
+          if (!connection.source || !connection.target) return;
+          connectByHandles({
+            sourceId: connection.source,
+            targetId: connection.target,
+            sourceHandle: connection.sourceHandle ?? "s-r1",
+            targetHandle: connection.targetHandle ?? "t-l1",
+          });
         }}
+        isValidConnection={(connection) =>
+          Boolean(connection.source && connection.target && connection.source !== connection.target)
+        }
+        connectionMode={ConnectionMode.Loose}
+        connectionLineType={ConnectionLineType.Step}
         onPaneClick={() => {
           if (connectType) return;
           setSelection(null);
