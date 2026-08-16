@@ -20,6 +20,10 @@ A working dark-mode React app you can run locally.
 
 Out of scope here: box internals, accounts, a full light-mode UI, and custom colors for every object.
 
+## Milestone 1 tweaks — in progress
+
+Reshape the palette and the things you drop on the board: panel that looks like a panel, gang-sized boxes, devices that go *into* boxes, draggable / reattachable cables, and an off-drawing stub. Details and open questions are in [MILESTONE-1-TWEAKS.md](./MILESTONE-1-TWEAKS.md).
+
 ## Milestone 2 — Box internals
 
 Double-click a box to zoom into how individual conductors land.

@@ -2,7 +2,7 @@
 
 Document real household Romex runs: labeled boxes, typed cables you can bend and color, and notes on a canvas. Dark mode for now. This is a documentation sketch, not a wiring or code guide.
 
-**What is already built:** milestone 1 — a local React editor with multiple drawings, export/import, and PNG export in light or dark. **What comes next:** box internals, accounts, in-app light mode, and more. Details are in [PLAN.md](./PLAN.md) and [MILESTONES.md](./MILESTONES.md).
+**What is already built:** milestone 1 — a local React editor with multiple drawings, export/import, and PNG export in light or dark. **What is in progress:** [milestone 1 tweaks](./MILESTONE-1-TWEAKS.md) (panel/box looks, devices in boxes, draggable cables). **What comes next:** box internals, accounts, in-app light mode, and more. Details are in [PLAN.md](./PLAN.md) and [MILESTONES.md](./MILESTONES.md).
 
 ## Getting started
 
