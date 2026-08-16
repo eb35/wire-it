@@ -22,16 +22,20 @@ const nodeTypes = { location: LocationNode, note: NoteNode };
 const edgeTypes = { cable: CableEdge };
 
 function toNodes(
-  locations: { id: string; kind: LocationNodeData["kind"]; label: string; device: LocationNodeData["device"]; position: Point }[],
+  locations: {
+    id: string;
+    kind: LocationNodeData["kind"];
+    label: string;
+    device: LocationNodeData["device"];
+    position: Point;
+  }[],
   notes: { id: string; text: string; position: Point }[],
-  selection: { kind: string; id: string } | null,
 ): Node[] {
   return [
     ...locations.map((location) => ({
       id: location.id,
       type: "location" as const,
       position: location.position,
-      selected: selection?.kind === "location" && selection.id === location.id,
       data: {
         kind: location.kind,
         label: location.label,
@@ -42,7 +46,6 @@ function toNodes(
       id: note.id,
       type: "note" as const,
       position: note.position,
-      selected: selection?.kind === "note" && selection.id === note.id,
       data: { text: note.text },
     })),
   ];
@@ -50,7 +53,6 @@ function toNodes(
 
 function DiagramCanvasInner() {
   const project = useDiagramStore((state) => state.project);
-  const selection = useDiagramStore((state) => state.selection);
   const connectType = useDiagramStore((state) => state.connectType);
   const connectFrom = useDiagramStore((state) => state.connectFrom);
   const moveNode = useDiagramStore((state) => state.moveNode);
@@ -62,15 +64,27 @@ function DiagramCanvasInner() {
   const addBend = useDiagramStore((state) => state.addBend);
   const { screenToFlowPosition } = useReactFlow();
 
-  const derivedNodes = useMemo(
-    () => toNodes(project.locations, project.notes, selection),
-    [project.locations, project.notes, selection],
+  const [nodes, setNodes] = useState<Node[]>(() =>
+    toNodes(project.locations, project.notes),
   );
-  const [nodes, setNodes] = useState<Node[]>(derivedNodes);
 
   useEffect(() => {
-    setNodes(derivedNodes);
-  }, [derivedNodes]);
+    const selectedId = useDiagramStore.getState().selection?.id;
+    setNodes((current) => {
+      const previous = new Map(current.map((node) => [node.id, node]));
+      return toNodes(project.locations, project.notes).map((node) => {
+        const prior = previous.get(node.id);
+        return {
+          ...node,
+          selected: Boolean(prior?.selected || node.id === selectedId),
+          position:
+            prior && "dragging" in prior && prior.dragging
+              ? prior.position
+              : node.position,
+        };
+      });
+    });
+  }, [project.id, project.locations, project.notes]);
 
   const edges = useMemo<Edge<CableEdgeData>[]>(
     () =>
@@ -81,7 +95,6 @@ function DiagramCanvasInner() {
         target: cable.target,
         sourceHandle: cable.sourceHandle,
         targetHandle: cable.targetHandle,
-        selected: selection?.kind === "cable" && selection.id === cable.id,
         data: {
           type: cable.type,
           label: cable.label,
@@ -89,7 +102,7 @@ function DiagramCanvasInner() {
           waypoints: cable.waypoints,
         },
       })),
-    [project.cables, selection],
+    [project.cables],
   );
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
@@ -126,22 +139,14 @@ function DiagramCanvasInner() {
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
         onNodeDragStop={(_event, node) => moveNode(node.id, node.position)}
-        onSelectionChange={({ nodes: selectedNodes, edges: selectedEdges }) => {
-          if (selectedEdges.length === 1 && selectedEdges[0]) {
-            setSelection({ kind: "cable", id: selectedEdges[0].id });
-            return;
-          }
-          if (selectedNodes.length === 1 && selectedNodes[0]) {
-            const node = selectedNodes[0];
-            setSelection({
-              kind: node.type === "note" ? "note" : "location",
-              id: node.id,
-            });
-            return;
-          }
-          if (selectedNodes.length === 0 && selectedEdges.length === 0) {
-            setSelection(null);
-          }
+        onNodeClick={(_event, node) => {
+          setSelection({
+            kind: node.type === "note" ? "note" : "location",
+            id: node.id,
+          });
+        }}
+        onEdgeClick={(_event, edge) => {
+          setSelection({ kind: "cable", id: edge.id });
         }}
         onEdgeDoubleClick={(event, edge) => {
           const cable = project.cables.find((item) => item.id === edge.id);

@@ -314,7 +314,20 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
     });
   },
 
-  setSelection: (selection) => set({ selection }),
+  setSelection: (selection) => {
+    const current = get().selection;
+    if (current === selection) return;
+    if (
+      current &&
+      selection &&
+      current.kind === selection.kind &&
+      current.id === selection.id
+    ) {
+      return;
+    }
+    if (!current && !selection) return;
+    set({ selection });
+  },
 
   deleteSelection: () => {
     const { selection } = get();
