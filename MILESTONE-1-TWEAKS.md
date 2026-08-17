@@ -8,7 +8,7 @@ This file is the source of truth for this branch. Open questions are called out 
 
 The left palette has four **Locations** (Panel, Box, Fixture, Note) and a **Cables** strip you click, then connect node-to-node.
 
-On the canvas, Panel / Box / Fixture are the same rounded card: kind, letter code, name, and one device from a dropdown. Cables are typed edges with 90° routes, end labels (`A1` / `To B2`), and colors. You cannot drag a cable type onto the board, and you cannot move an existing run from one box to another without deleting it.
+On the canvas, Panel / Box / Off-drawing show a one-line header inside the body (box code, then name; no kind badge). Boxes keep a 2×N device area under that strip. Cables auto-route with rounded 90° bends, one-line end labels, and type+note text along the run.
 
 ## Palette direction
 
@@ -55,7 +55,7 @@ First set:
 
 **Kept for now:** 15A and 20A GFCI. They were already in the app and are common. Easy to drop if you do not want them.
 
-How a device looks *inside* the box (icons vs. full labels, mud-ring, etc.) is **later**. This pass: empty slots are visible, a placed device shows a simple symbol plus a short name, and the existing box code / name stay visible (name and code sit above the box body so the 2×N shape can stay honest).
+How a device looks *inside* the box (icons vs. full labels, mud-ring, etc.) is **later**. This pass: empty slots are visible, a placed device shows a simple symbol plus a short name, and the box code / name sit in a thin header strip at the top *inside* the box (code first, name truncated to one line; hover shows the full name). The 2×N device area stays below that strip.
 
 ### Cables
 
@@ -66,6 +66,10 @@ Click-to-arm, then connect, is easy to miss and is not how the locations work. M
 - **Reattach:** drag an existing run’s end from one location to another. No more delete-and-recreate.
 
 The old “click the type, then click two boxes” path can stay as a fallback.
+
+Auto-route (empty waypoints) takes the shortest orthogonal path with the fewest bends, rounded corners, and a clearance around other boxes. Multiple runs between the same boxes travel in parallel. Landings can sit anywhere on a box edge (the old 3-per-side dots were making routes zigzag). Hover a run to drag a bend; drag a landing along the border; drop a run on empty canvas for a one-ended (loose) wire.
+
+On-wire text is `12/2` plus the inspector Note, repeated with space between. End labels are one line (`A2 to H2`) and sit beside the path.
 
 ## Off-drawing location
 
@@ -78,13 +82,14 @@ This pass:
 
 ## Data model (so old drawings still open)
 
-Bump saved JSON from version **1** to **2**. `parseProject` still reads v1 and fills in the new fields.
+Bump saved JSON from version **1** to **3**. `parseProject` still reads v1 and v2 and fills in the new fields.
 
 - `fixture` locations become **1-gang boxes** with a light in the slot.
 - The old single `device` field becomes **slots** (one per gang). `none` / `duplex-outlet` / `gfci-outlet` map to `empty` / `duplex-15` / `gfci-15`.
 - New boxes default to **empty slots** (junction until you drop a device).
 - Panels get a list of numbered **breaker spaces** (default **12**, two columns, US-style odd left / even right). Connecting to a space uses that breaker number as the port.
 - Off-drawing is a new `kind`.
+- Cables may have an empty `target` and a `looseEnd` point (one-ended run).
 
 ## Implementation plan
 
@@ -129,5 +134,7 @@ Answer these whenever. I will keep moving on the defaults above.
 - [x] Devices drop into slots
 - [x] Cable drag, snap, and reconnect
 - [x] README / PLAN / MILESTONES pointers
+- [x] In-box header: code + name, no kind badge
+- [x] Cable routing: rounded 90° auto-route, on-wire notes, loose ends
 
 Started on `feat/milestone-1-tweaks`. Existing milestone 1 drawings should keep opening after the version bump.

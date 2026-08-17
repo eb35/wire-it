@@ -71,10 +71,7 @@ export function sampleKitchen(): Project {
         targetPort: "1",
         label: "from brk 5",
         color: "sheath",
-        waypoints: [
-          { x: 280, y: 220 },
-          { x: 280, y: 120 },
-        ],
+        waypoints: [],
       },
       {
         id: "cab_onward",
@@ -87,10 +84,7 @@ export function sampleKitchen(): Project {
         targetPort: "1",
         label: "",
         color: "blue",
-        waypoints: [
-          { x: 400, y: 280 },
-          { x: 260, y: 280 },
-        ],
+        waypoints: [],
       },
       {
         id: "cab_travelers",
@@ -103,10 +97,7 @@ export function sampleKitchen(): Project {
         targetPort: "1",
         label: "",
         color: "sheath",
-        waypoints: [
-          { x: 394, y: 500 },
-          { x: 500, y: 500 },
-        ],
+        waypoints: [],
       },
     ],
     notes: [

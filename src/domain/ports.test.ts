@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emptySlots, defaultBreakers } from "./location";
-import { nextLocationCode, nextPort, wireEndCopy, wireTag } from "./ports";
+import { nextLocationCode, nextPort, wireEndCopy, wireEndLine, wireEndParts, wireTag } from "./ports";
 import type { Cable, Location } from "./types";
 
 const box = (id: string, code: string): Location => ({
@@ -48,5 +48,8 @@ describe("ports", () => {
       title: "A1",
       subtitle: "To B2",
     });
+    expect(wireEndLine("A", "2", "H", "2")).toBe("A2 to H2");
+    expect(wireEndLine("A", "1")).toBe("A1 loose");
+    expect(wireEndParts("A", "2", "C", "3")).toEqual({ local: "A2", rest: "to C3" });
   });
 });

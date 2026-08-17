@@ -32,9 +32,23 @@ body {
   opacity: 0.45;
 }
 
+.location-node .side-strip {
+  opacity: 0;
+  background: #38bdf8;
+  border: 0;
+}
+
 .location-node.connect-ready .react-flow__handle,
 .location-node:hover .react-flow__handle {
   opacity: 1;
+}
+
+.location-node:hover .side-strip {
+  opacity: 0.4;
+}
+
+.location-node.connect-ready .side-strip {
+  opacity: 0.75;
 }
 
 [data-export-theme="light"] .react-flow {
@@ -54,4 +68,9 @@ body {
 [data-export-theme="light"] .box-body {
   background: #e4e4e7 !important;
   border-color: #71717a !important;
+}
+
+[data-export-theme="light"] .location-node .box-code {
+  background: #27272a !important;
+  color: #fafafa !important;
 }

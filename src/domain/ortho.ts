@@ -1,17 +1,5 @@
+import { GRID_SIZE } from "./layout";
 import type { Point, Side } from "./types";
-
-export function sideFromHandle(handleId: string): Side {
-  const breaker = handleId.match(/brk-(\d+)/);
-  if (breaker) {
-    return Number(breaker[1]) % 2 === 1 ? "left" : "right";
-  }
-  const token = handleId.split("-")[1] ?? "r0";
-  const letter = token[0];
-  if (letter === "t") return "top";
-  if (letter === "b") return "bottom";
-  if (letter === "l") return "left";
-  return "right";
-}
 
 export function stubPoint(point: Point, side: Side, length = 24): Point {
   switch (side) {
@@ -53,6 +41,45 @@ export function collapseColinear(points: Point[]): Point[] {
     out.push({ ...last });
   }
   return out;
+}
+
+function pointLineDistance(point: Point, a: Point, b: Point): number {
+  if (a.x === b.x) return Math.abs(point.x - a.x);
+  if (a.y === b.y) return Math.abs(point.y - a.y);
+  return Math.hypot(point.x - a.x, point.y - a.y);
+}
+
+export function collapseNearColinear(points: Point[], epsilon = 10): Point[] {
+  if (points.length < 3) return points.map((point) => ({ ...point }));
+  const out: Point[] = [{ ...points[0]! }];
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const previous = out[out.length - 1]!;
+    const current = points[i]!;
+    const next = points[i + 1]!;
+    if (samePoint(previous, current)) continue;
+    if (pointLineDistance(current, previous, next) <= epsilon) continue;
+    out.push({ ...current });
+  }
+  const last = points[points.length - 1]!;
+  if (!samePoint(out[out.length - 1]!, last)) out.push({ ...last });
+  return collapseColinear(out);
+}
+
+export function connectOrtho(points: Point[]): Point[] {
+  if (points.length === 0) return [];
+  const path: Point[] = [{ ...points[0]! }];
+  for (let i = 1; i < points.length; i += 1) {
+    const previous = path[path.length - 1]!;
+    const current = points[i]!;
+    if (samePoint(previous, current)) continue;
+    if (aligned(previous, current)) {
+      path.push({ ...current });
+      continue;
+    }
+    path.push({ x: current.x, y: previous.y });
+    path.push({ ...current });
+  }
+  return collapseColinear(path);
 }
 
 export function buildOrthoPath(
@@ -104,6 +131,61 @@ export function segmentLength(a: Point, b: Point): number {
   return Math.hypot(b.x - a.x, b.y - a.y);
 }
 
+export function movePathSegment(path: Point[], segmentIndex: number, pointer: Point): Point[] {
+  if (path.length < 2) return path.map((point) => ({ ...point }));
+  const last = path.length - 1;
+  if (segmentIndex < 0 || segmentIndex >= last) return path.slice(1, -1);
+
+  if (path.length === 2) {
+    const start = path[0]!;
+    const end = path[1]!;
+    if (isHorizontalSegment(start, end)) {
+      return collapseNearColinear([
+        start,
+        { x: start.x, y: pointer.y },
+        { x: end.x, y: pointer.y },
+        end,
+      ]).slice(1, -1);
+    }
+    return collapseNearColinear([
+      start,
+      { x: pointer.x, y: start.y },
+      { x: pointer.x, y: end.y },
+      end,
+    ]).slice(1, -1);
+  }
+
+  const next = path.map((point) => ({ ...point }));
+  const a = next[segmentIndex]!;
+  const b = next[segmentIndex + 1]!;
+  if (isHorizontalSegment(a, b)) {
+    if (segmentIndex > 0) next[segmentIndex] = { x: a.x, y: pointer.y };
+    if (segmentIndex + 1 < last) next[segmentIndex + 1] = { x: b.x, y: pointer.y };
+  } else {
+    if (segmentIndex > 0) next[segmentIndex] = { x: pointer.x, y: a.y };
+    if (segmentIndex + 1 < last) next[segmentIndex + 1] = { x: pointer.x, y: b.y };
+  }
+  return collapseNearColinear(next).slice(1, -1);
+}
+
+export function insertBendOnSegment(path: Point[], segmentIndex: number, offset = GRID_SIZE): Point[] {
+  if (path.length < 2) return [];
+  const last = path.length - 1;
+  if (segmentIndex < 0 || segmentIndex >= last) return path.slice(1, -1);
+  const a = path[segmentIndex]!;
+  const b = path[segmentIndex + 1]!;
+  const mid = segmentMid(a, b);
+  const pointer = isHorizontalSegment(a, b)
+    ? { x: mid.x, y: mid.y + offset }
+    : { x: mid.x + offset, y: mid.y };
+  return movePathSegment(path, segmentIndex, pointer);
+}
+
+export function removePathVertex(path: Point[], vertexIndex: number): Point[] {
+  if (vertexIndex <= 0 || vertexIndex >= path.length - 1) return path.slice(1, -1);
+  return connectOrtho(path.filter((_, index) => index !== vertexIndex)).slice(1, -1);
+}
+
 export function moveOrthoSegment(
   start: Point,
   startSide: Side,
@@ -152,6 +234,74 @@ export function pathToD(points: Point[]): string {
   return points
     .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
     .join(" ");
+}
+
+function pointToward(from: Point, to: Point, distance: number): Point {
+  const length = segmentLength(from, to) || 1;
+  const t = Math.min(1, distance / length);
+  return { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
+}
+
+export function pathToRoundedD(points: Point[], radius = 10): string {
+  if (points.length === 0) return "";
+  if (points.length === 1) return `M ${points[0]!.x} ${points[0]!.y}`;
+  if (points.length === 2) {
+    return `M ${points[0]!.x} ${points[0]!.y} L ${points[1]!.x} ${points[1]!.y}`;
+  }
+  let d = `M ${points[0]!.x} ${points[0]!.y}`;
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const prev = points[i - 1]!;
+    const curr = points[i]!;
+    const next = points[i + 1]!;
+    const r = Math.min(radius, segmentLength(prev, curr) / 2, segmentLength(curr, next) / 2);
+    if (r < 1.5) {
+      d += ` L ${curr.x} ${curr.y}`;
+      continue;
+    }
+    const incoming = pointToward(curr, prev, r);
+    const outgoing = pointToward(curr, next, r);
+    d += ` L ${incoming.x} ${incoming.y} Q ${curr.x} ${curr.y} ${outgoing.x} ${outgoing.y}`;
+  }
+  const last = points[points.length - 1]!;
+  d += ` L ${last.x} ${last.y}`;
+  return d;
+}
+
+export function pathLength(points: Point[]): number {
+  let length = 0;
+  for (let i = 0; i < points.length - 1; i += 1) {
+    length += segmentLength(points[i]!, points[i + 1]!);
+  }
+  return length;
+}
+
+export function alongSegment(
+  from: Point,
+  toward: Point,
+  along = 28,
+  perp = 14,
+): { point: Point; angle: number } {
+  const dx = toward.x - from.x;
+  const dy = toward.y - from.y;
+  const length = Math.hypot(dx, dy) || 1;
+  const ux = dx / length;
+  const uy = dy / length;
+  let angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+  let nx = -uy;
+  let ny = ux;
+  if (angle > 90 || angle < -90) {
+    angle += 180;
+    nx = -nx;
+    ny = -ny;
+  }
+  const travel = Math.min(along, Math.max(12, length * 0.35));
+  return {
+    point: {
+      x: from.x + ux * travel + nx * perp,
+      y: from.y + uy * travel + ny * perp,
+    },
+    angle,
+  };
 }
 
 export function labelAnchor(

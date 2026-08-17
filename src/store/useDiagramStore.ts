@@ -1,17 +1,25 @@
 import { create } from "zustand";
 import {
+  breakerOffsetT,
   clampPanelSpaces,
-  countCablesBetween,
   createId,
   defaultBreakers,
   emptySlots,
   firstEmptySlot,
-  initialWaypoints,
+  formatBreakerHandle,
+  formatHandle,
   locationDefaults,
+  uniqueBoxHandle,
+  locationRect,
+  nearestLocation,
   nextLocationCode,
   padSlots,
-  pickHandles,
+  parseHandle,
+  pickConnection,
+  pointOnSide,
   portForHandle,
+  projectToPerimeter,
+  snapToGrid,
 } from "../domain";
 import type {
   BoxCapacity,
@@ -54,6 +62,7 @@ type DiagramState = {
   selection: Selection | null;
   connectType: CableTypeId | null;
   connectFrom: string | null;
+  draggingCableEnd: { cableId: string; end: "source" | "target" } | null;
   setProjectName: (name: string) => void;
   newDrawing: () => void;
   switchDrawing: (id: string) => void;
@@ -86,6 +95,12 @@ type DiagramState = {
       targetHandle: string;
     },
   ) => void;
+  addDanglingCable: (sourceId: string, sourceHandle: string | null | undefined, looseEnd: Point) => void;
+  setLooseEnd: (id: string, looseEnd: Point) => void;
+  attachLooseEnd: (id: string, targetId: string, targetHandle?: string | null) => void;
+  slideLanding: (id: string, end: "source" | "target", point: Point) => void;
+  dropCableEnd: (id: string, end: "source" | "target", point: Point) => void;
+  setDraggingCableEnd: (value: { cableId: string; end: "source" | "target" } | null) => void;
   cancelConnect: () => void;
   updateCable: (
     id: string,
@@ -113,7 +128,6 @@ function makeCable(
   targetHandle: string,
   type: CableTypeId,
 ): Cable {
-  const existing = countCablesBetween(project.cables, source.id, target.id);
   return {
     id: createId("cab"),
     type,
@@ -125,8 +139,28 @@ function makeCable(
     targetPort: portForHandle(target, targetHandle, project.cables),
     label: "",
     color: "sheath",
-    waypoints: initialWaypoints(source, target, existing),
+    waypoints: [],
   };
+}
+
+function nearestBreakerHandle(
+  location: Location,
+  role: "source" | "target",
+  point: Point,
+): string {
+  const rect = locationRect(location);
+  let best = 1;
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (let number = 1; number <= location.spaces; number += 1) {
+    const side = number % 2 === 1 ? "left" : "right";
+    const landing = pointOnSide(rect, side, breakerOffsetT(number, location.spaces));
+    const dist = Math.hypot(point.x - landing.x, point.y - landing.y);
+    if (dist < bestDist) {
+      best = number;
+      bestDist = dist;
+    }
+  }
+  return formatBreakerHandle(role, best);
 }
 
 function applyLocationPatch(item: Location, patch: LocationPatch): Location {
@@ -160,6 +194,7 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
   selection: null,
   connectType: null,
   connectFrom: null,
+  draggingCableEnd: null,
 
   setProjectName: (name) => {
     const { library, project } = get();
@@ -224,7 +259,7 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
       kind: input.kind,
       label: defaults.label,
       code: nextLocationCode(project.locations),
-      position,
+      position: snapToGrid(position),
       capacity,
       slots: emptySlots(capacity),
       spaces: defaults.spaces,
@@ -287,21 +322,66 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
 
   moveNode: (id, position) => {
     const { library, project } = get();
-    if (project.locations.some((item) => item.id === id)) {
+    if (id.startsWith("loose:")) {
+      const cableId = id.slice("loose:".length);
+      const looseEnd = snapToGrid({ x: position.x + 6, y: position.y + 6 });
+      const hit = project.locations.find((location) => {
+        const rect = locationRect(location);
+        return (
+          looseEnd.x >= rect.x - 24 &&
+          looseEnd.x <= rect.x + rect.width + 24 &&
+          looseEnd.y >= rect.y - 24 &&
+          looseEnd.y <= rect.y + rect.height + 24
+        );
+      });
+      if (hit) {
+        get().attachLooseEnd(cableId, hit.id);
+        return;
+      }
       set(
         persist(library, {
           ...project,
-          locations: project.locations.map((item) =>
-            item.id === id ? { ...item, position } : item,
+          cables: project.cables.map((item) =>
+            item.id === cableId ? { ...item, looseEnd, waypoints: [] } : item,
           ),
         }),
       );
       return;
     }
+    const snapped = snapToGrid(position);
+    if (project.locations.some((item) => item.id === id)) {
+      const locations = project.locations.map((item) =>
+        item.id === id ? { ...item, position: snapped } : item,
+      );
+      const cables = project.cables.map((cable) => {
+        if (cable.waypoints.length > 0 || cable.lockLandings) return cable;
+        if (cable.source !== id && cable.target !== id) return cable;
+        if (!cable.target) return { ...cable, waypoints: [] };
+        const source = locations.find((item) => item.id === cable.source);
+        const target = locations.find((item) => item.id === cable.target);
+        if (!source || !target) return cable;
+        const others = project.cables.filter((item) => item.id !== cable.id);
+        const handles = pickConnection(
+          source,
+          target,
+          others,
+          source.kind === "panel" ? cable.sourceHandle : null,
+          target.kind === "panel" ? cable.targetHandle : null,
+        );
+        return {
+          ...cable,
+          sourceHandle: handles.sourceHandle,
+          targetHandle: handles.targetHandle,
+          waypoints: [],
+        };
+      });
+      set(persist(library, { ...project, locations, cables }));
+      return;
+    }
     set(
       persist(library, {
         ...project,
-        notes: project.notes.map((item) => (item.id === id ? { ...item, position } : item)),
+        notes: project.notes.map((item) => (item.id === id ? { ...item, position: snapped } : item)),
       }),
     );
   },
@@ -366,7 +446,7 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
     const source = project.locations.find((item) => item.id === connectFrom);
     const target = project.locations.find((item) => item.id === locationId);
     if (!source || !target) return;
-    const handles = pickHandles(source, target, project.cables);
+    const handles = pickConnection(source, target, project.cables);
     const cable = makeCable(project, source, target, handles.sourceHandle, handles.targetHandle, connectType);
     set({
       ...persist(library, { ...project, cables: [...project.cables, cable] }),
@@ -389,12 +469,13 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
         cable.targetHandle === targetHandle,
     );
     if (already) return;
+    const handles = pickConnection(source, target, project.cables, sourceHandle, targetHandle);
     const cable = makeCable(
       project,
       source,
       target,
-      sourceHandle,
-      targetHandle,
+      handles.sourceHandle,
+      handles.targetHandle,
       connectType ?? "12/2",
     );
     set({
@@ -411,20 +492,19 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
     const target = project.locations.find((item) => item.id === targetId);
     if (!cable || !source || !target) return;
     const others = project.cables.filter((item) => item.id !== id);
-    const sourceChanged = cable.source !== sourceId || cable.sourceHandle !== sourceHandle;
-    const targetChanged = cable.target !== targetId || cable.targetHandle !== targetHandle;
+    const sourceChanged = cable.source !== sourceId;
+    const targetChanged = cable.target !== targetId;
+    const handles = pickConnection(source, target, others, sourceHandle, targetHandle);
     const next: Cable = {
       ...cable,
       source: sourceId,
       target: targetId,
-      sourceHandle,
-      targetHandle,
-      sourcePort: sourceChanged ? portForHandle(source, sourceHandle, others) : cable.sourcePort,
-      targetPort: targetChanged ? portForHandle(target, targetHandle, others) : cable.targetPort,
-      waypoints:
-        cable.source !== sourceId || cable.target !== targetId
-          ? initialWaypoints(source, target, countCablesBetween(others, sourceId, targetId))
-          : cable.waypoints,
+      sourceHandle: handles.sourceHandle,
+      targetHandle: handles.targetHandle,
+      sourcePort: sourceChanged ? portForHandle(source, handles.sourceHandle, others) : cable.sourcePort,
+      targetPort: targetChanged ? portForHandle(target, handles.targetHandle, others) : cable.targetPort,
+      waypoints: [],
+      looseEnd: undefined,
     };
     set(
       persist(library, {
@@ -434,7 +514,195 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
     );
   },
 
-  cancelConnect: () => set({ connectType: null, connectFrom: null }),
+  addDanglingCable: (sourceId, sourceHandle, looseEnd) => {
+    const { library, project, connectType } = get();
+    const source = project.locations.find((item) => item.id === sourceId);
+    if (!source) return;
+    const parsed = parseHandle(sourceHandle ?? "s-r-50");
+    const handle =
+      source.kind === "panel" && parsed.breaker
+        ? formatBreakerHandle("source", parsed.breaker)
+        : uniqueBoxHandle("source", parsed.side, parsed.t, source.id, project.cables);
+    const cable: Cable = {
+      id: createId("cab"),
+      type: connectType ?? "12/2",
+      source: sourceId,
+      target: "",
+      sourceHandle: handle,
+      targetHandle: "t-loose",
+      sourcePort: portForHandle(source, handle, project.cables),
+      targetPort: "1",
+      label: "",
+      color: "sheath",
+      waypoints: [],
+      looseEnd: snapToGrid(looseEnd),
+    };
+    set({
+      ...persist(library, { ...project, cables: [...project.cables, cable] }),
+      connectType: null,
+      connectFrom: null,
+      selection: { kind: "cable", id: cable.id },
+    });
+  },
+
+  setLooseEnd: (id, looseEnd) => {
+    const { library, project } = get();
+    set(
+      persist(library, {
+        ...project,
+        cables: project.cables.map((item) =>
+          item.id === id ? { ...item, looseEnd: snapToGrid(looseEnd), waypoints: [] } : item,
+        ),
+      }),
+    );
+  },
+
+  attachLooseEnd: (id, targetId, targetHandle) => {
+    const { library, project } = get();
+    const cable = project.cables.find((item) => item.id === id);
+    const source = project.locations.find((item) => item.id === cable?.source);
+    const target = project.locations.find((item) => item.id === targetId);
+    if (!cable || !source || !target || source.id === target.id) return;
+    const others = project.cables.filter((item) => item.id !== id);
+    const handles = pickConnection(source, target, others, cable.sourceHandle, targetHandle);
+    const next: Cable = {
+      ...cable,
+      target: targetId,
+      sourceHandle: handles.sourceHandle,
+      targetHandle: handles.targetHandle,
+      targetPort: portForHandle(target, handles.targetHandle, others),
+      waypoints: [],
+      looseEnd: undefined,
+    };
+    set(
+      persist(library, {
+        ...project,
+        cables: project.cables.map((item) => (item.id === id ? next : item)),
+      }),
+    );
+  },
+
+  slideLanding: (id, end, point) => {
+    const { library, project } = get();
+    const cable = project.cables.find((item) => item.id === id);
+    if (!cable) return;
+    const locationId = end === "source" ? cable.source : cable.target;
+    const location = project.locations.find((item) => item.id === locationId);
+    if (!location) return;
+    const role = end === "source" ? "source" : "target";
+    const handle =
+      location.kind === "panel"
+        ? nearestBreakerHandle(location, role, point)
+        : (() => {
+            const landing = projectToPerimeter(locationRect(location), point);
+            return formatHandle(role, landing.side, landing.t);
+          })();
+    const next: Cable = {
+      ...cable,
+      sourceHandle: end === "source" ? handle : cable.sourceHandle,
+      targetHandle: end === "target" ? handle : cable.targetHandle,
+      waypoints: [],
+      lockLandings: true,
+    };
+    set(
+      persist(library, {
+        ...project,
+        cables: project.cables.map((item) => (item.id === id ? next : item)),
+      }),
+    );
+  },
+
+  dropCableEnd: (id, end, point) => {
+    const { library, project } = get();
+    const cable = project.cables.find((item) => item.id === id);
+    if (!cable) return;
+    const hit = nearestLocation(project.locations, point);
+    const others = project.cables.filter((item) => item.id !== id);
+
+    if (!hit) {
+      if (end === "target" || !cable.target) {
+        set(
+          persist(library, {
+            ...project,
+            cables: project.cables.map((item) =>
+              item.id === id
+                ? {
+                    ...item,
+                    target: "",
+                    targetHandle: "t-loose",
+                    waypoints: [],
+                    looseEnd: snapToGrid(point),
+                    lockLandings: true,
+                  }
+                : item,
+            ),
+          }),
+        );
+        return;
+      }
+      const remaining = project.locations.find((item) => item.id === cable.target);
+      if (!remaining) return;
+      const next: Cable = {
+        ...cable,
+        source: remaining.id,
+        sourceHandle: cable.targetHandle.startsWith("t-")
+          ? `s-${cable.targetHandle.slice(2)}`
+          : cable.targetHandle,
+        sourcePort: cable.targetPort,
+        target: "",
+        targetHandle: "t-loose",
+        waypoints: [],
+        looseEnd: snapToGrid(point),
+        lockLandings: true,
+      };
+      set(
+        persist(library, {
+          ...project,
+          cables: project.cables.map((item) => (item.id === id ? next : item)),
+        }),
+      );
+      return;
+    }
+
+    if (end === "source" && hit.id === cable.target) return;
+    if (end === "target" && hit.id === cable.source) return;
+
+    const role = end === "source" ? "source" : "target";
+    const landing = projectToPerimeter(locationRect(hit), point);
+    const handle =
+      hit.kind === "panel"
+        ? nearestBreakerHandle(hit, role, point)
+        : uniqueBoxHandle(role, landing.side, landing.t, hit.id, others);
+
+    const next: Cable = {
+      ...cable,
+      source: end === "source" ? hit.id : cable.source,
+      target: end === "target" ? hit.id : cable.target,
+      sourceHandle: end === "source" ? handle : cable.sourceHandle,
+      targetHandle: end === "target" ? handle : cable.targetHandle,
+      sourcePort:
+        end === "source" && hit.id !== cable.source
+          ? portForHandle(hit, handle, others)
+          : cable.sourcePort,
+      targetPort:
+        end === "target" && hit.id !== cable.target
+          ? portForHandle(hit, handle, others)
+          : cable.targetPort,
+      waypoints: [],
+      lockLandings: true,
+      looseEnd: undefined,
+    };
+    set(
+      persist(library, {
+        ...project,
+        cables: project.cables.map((item) => (item.id === id ? next : item)),
+      }),
+    );
+  },
+
+  cancelConnect: () => set({ connectType: null, connectFrom: null, draggingCableEnd: null }),
+
+  setDraggingCableEnd: (value) => set({ draggingCableEnd: value }),
 
   updateCable: (id, patch) => {
     const { library, project } = get();
@@ -457,14 +725,47 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
   },
 
   resetRoute: (id) => {
-    const { project } = get();
+    const { library, project } = get();
     const cable = project.cables.find((item) => item.id === id);
     if (!cable) return;
     const source = project.locations.find((item) => item.id === cable.source);
     const target = project.locations.find((item) => item.id === cable.target);
-    if (!source || !target) return;
-    const existing = countCablesBetween(project.cables, source.id, target.id);
-    get().setWaypoints(id, initialWaypoints(source, target, Math.max(0, existing - 1)));
+    if (!source) return;
+    if (!target) {
+      set(
+        persist(library, {
+          ...project,
+          cables: project.cables.map((item) =>
+            item.id === id ? { ...item, waypoints: [], lockLandings: false } : item,
+          ),
+        }),
+      );
+      return;
+    }
+    const others = project.cables.filter((item) => item.id !== id);
+    const handles = pickConnection(
+      source,
+      target,
+      others,
+      source.kind === "panel" ? cable.sourceHandle : null,
+      target.kind === "panel" ? cable.targetHandle : null,
+    );
+    set(
+      persist(library, {
+        ...project,
+        cables: project.cables.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                sourceHandle: handles.sourceHandle,
+                targetHandle: handles.targetHandle,
+                waypoints: [],
+                lockLandings: false,
+              }
+            : item,
+        ),
+      }),
+    );
   },
 
   deleteCable: (id) => {

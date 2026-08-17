@@ -24,7 +24,7 @@ import type {
   Project,
   WireColorId,
 } from "./types";
-import { LEGACY_PROJECT_VERSION, PROJECT_VERSION } from "./types";
+import { PROJECT_VERSION, SUPPORTED_PROJECT_VERSIONS } from "./types";
 
 const WIRE_COLOR_IDS = new Set<WireColorId>([
   "sheath",
@@ -117,9 +117,14 @@ function parseLocation(item: unknown, index: number, used: Location[]): Location
 }
 
 export function parseProject(raw: unknown): Project {
-  if (!isRecord(raw) || (raw.version !== PROJECT_VERSION && raw.version !== LEGACY_PROJECT_VERSION)) {
+  if (
+    !isRecord(raw) ||
+    typeof raw.version !== "number" ||
+    !SUPPORTED_PROJECT_VERSIONS.includes(raw.version as (typeof SUPPORTED_PROJECT_VERSIONS)[number])
+  ) {
     throw new Error("This file is not a Wire-it drawing (unexpected version).");
   }
+  const version = raw.version;
   if (typeof raw.id !== "string" || typeof raw.name !== "string") {
     throw new Error("This drawing is missing a name.");
   }
@@ -139,7 +144,6 @@ export function parseProject(raw: unknown): Project {
       typeof item.id !== "string" ||
       !CABLE_TYPE_IDS.includes(item.type as CableTypeId) ||
       typeof item.source !== "string" ||
-      typeof item.target !== "string" ||
       typeof item.sourceHandle !== "string" ||
       typeof item.targetHandle !== "string" ||
       !WIRE_COLOR_IDS.has(item.color as WireColorId) ||
@@ -148,14 +152,23 @@ export function parseProject(raw: unknown): Project {
     ) {
       throw new Error(`Cable ${index + 1} is invalid.`);
     }
-    if (!locationIds.has(item.source) || !locationIds.has(item.target)) {
+    if (!locationIds.has(item.source)) {
       throw new Error(`Cable ${index + 1} points at a missing box.`);
+    }
+    const dangling =
+      item.target === "" || item.target === null || item.target === undefined;
+    const target = dangling ? "" : typeof item.target === "string" ? item.target : "";
+    if (!dangling && !locationIds.has(target)) {
+      throw new Error(`Cable ${index + 1} points at a missing box.`);
+    }
+    if (dangling && !isPoint(item.looseEnd)) {
+      throw new Error(`Cable ${index + 1} needs a loose end.`);
     }
     return {
       id: item.id,
       type: item.type as CableTypeId,
       source: item.source,
-      target: item.target,
+      target,
       sourceHandle: item.sourceHandle,
       targetHandle: item.targetHandle,
       sourcePort:
@@ -168,7 +181,8 @@ export function parseProject(raw: unknown): Project {
           : "1",
       label: typeof item.label === "string" ? item.label : "",
       color: item.color as WireColorId,
-      waypoints: item.waypoints,
+      waypoints: version >= 3 ? item.waypoints : [],
+      ...(dangling || isPoint(item.looseEnd) ? { looseEnd: item.looseEnd as Point } : {}),
     };
   });
 

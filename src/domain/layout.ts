@@ -1,12 +1,20 @@
 import type { BoxCapacity, Location, Point } from "./types";
 
 export const GANG_UNIT = 96;
-export const BOX_CAPTION = 34;
+export const BOX_HEADER = 24;
 export const PANEL_WIDTH = 176;
-export const PANEL_HEADER = 56;
+export const PANEL_HEADER = BOX_HEADER;
 export const PANEL_ROW = 34;
-export const EXTERNAL_SIZE = { width: 148, height: 100 };
+export const EXTERNAL_SIZE = { width: 148, height: 56 };
 export const CABLE_SNAP_DISTANCE = 88;
+export const GRID_SIZE = 20;
+
+export function snapToGrid(point: Point, size = GRID_SIZE): Point {
+  return {
+    x: Math.round(point.x / size) * size,
+    y: Math.round(point.y / size) * size,
+  };
+}
 
 export function boxBodySize(capacity: BoxCapacity): { width: number; height: number } {
   return { width: GANG_UNIT * capacity, height: GANG_UNIT * 2 };
@@ -14,7 +22,7 @@ export function boxBodySize(capacity: BoxCapacity): { width: number; height: num
 
 export function boxSize(capacity: BoxCapacity): { width: number; height: number } {
   const body = boxBodySize(capacity);
-  return { width: body.width, height: body.height + BOX_CAPTION };
+  return { width: body.width, height: body.height + BOX_HEADER };
 }
 
 export function panelSize(spaces: number): { width: number; height: number } {
