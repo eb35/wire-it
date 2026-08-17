@@ -55,3 +55,8 @@ body {
   background: #e4e4e7 !important;
   border-color: #71717a !important;
 }
+
+[data-export-theme="light"] .location-node .box-code {
+  background: #27272a !important;
+  color: #fafafa !important;
+}

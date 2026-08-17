@@ -3,7 +3,6 @@ import type {
   CableTypeId,
   ConductorColor,
   DeviceType,
-  LocationKind,
   WireColorId,
 } from "./types";
 
@@ -91,12 +90,6 @@ export const PALETTE_DEVICES: DeviceType[] = [
   "light",
   "breaker",
 ];
-
-export const KIND_LABEL: Record<LocationKind, string> = {
-  panel: "Panel",
-  box: "Box",
-  external: "Off-drawing",
-};
 
 export function deviceLabel(device: DeviceType): string {
   return DEVICE_OPTIONS.find((item) => item.id === device)?.label ?? device;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { sideFromHandle } from "./ortho";
 import { migrateLegacyDevice, migrateLegacyKind } from "./location";
-import { nearestLocation } from "./layout";
+import { boxSize, nearestLocation } from "./layout";
 import { emptySlots, defaultBreakers } from "./location";
 import type { Location } from "./types";
 
@@ -20,6 +20,13 @@ describe("panel handles", () => {
     expect(sideFromHandle("s-brk-5")).toBe("left");
     expect(sideFromHandle("t-brk-6")).toBe("right");
     expect(sideFromHandle("s-r1")).toBe("right");
+  });
+});
+
+describe("box layout", () => {
+  it("keeps a 2×N device area under a one-line in-box header", () => {
+    expect(boxSize(1)).toEqual({ width: 96, height: 216 });
+    expect(boxSize(3)).toEqual({ width: 288, height: 216 });
   });
 });
 

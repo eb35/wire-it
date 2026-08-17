@@ -1,7 +1,13 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import type { CSSProperties, DragEvent, MouseEvent } from "react";
-import { KIND_LABEL } from "../../domain/catalog";
-import { BOX_CAPTION, GANG_UNIT, PANEL_HEADER, PANEL_ROW, boxBodySize } from "../../domain/layout";
+import {
+  BOX_HEADER,
+  EXTERNAL_SIZE,
+  PANEL_HEADER,
+  PANEL_ROW,
+  PANEL_WIDTH,
+  boxSize,
+} from "../../domain/layout";
 import { PALETTE_MIME, parsePalette } from "../../domain/palette";
 import type { BreakerSlot, DeviceSlot, LocationKind } from "../../domain/types";
 import { useDiagramStore } from "../../store/useDiagramStore";
@@ -80,22 +86,17 @@ function PanelHandles({ spaces }: { spaces: number }) {
   );
 }
 
-function Caption({
-  kind,
-  code,
-  label,
-}: {
-  kind: LocationKind;
-  code: string;
-  label: string;
-}) {
+function LocationCaption({ code, label }: { code: string; label: string }) {
   return (
-    <div className="flex items-end justify-between gap-2 px-0.5 pb-1" style={{ height: BOX_CAPTION }}>
-      <div className="min-w-0">
-        <div className="muted text-[10px] uppercase tracking-wide text-zinc-500">{KIND_LABEL[kind]}</div>
-        <div className="truncate text-xs font-semibold leading-tight">{label}</div>
-      </div>
-      <span className="rounded bg-zinc-800 px-1.5 font-mono text-[11px] text-zinc-200">{code}</span>
+    <div
+      className="flex shrink-0 items-center gap-1 border-b border-zinc-600/80 px-1"
+      style={{ height: BOX_HEADER }}
+      title={label}
+    >
+      <span className="box-code shrink-0 rounded bg-zinc-950/70 px-1 font-mono text-[10px] font-semibold leading-none text-zinc-200">
+        {code}
+      </span>
+      <span className="min-w-0 truncate text-[10px] leading-none text-zinc-300">{label}</span>
     </div>
   );
 }
@@ -126,40 +127,51 @@ function useLocationChrome(id: string) {
 function BoxBody({
   capacity,
   slots,
+  code,
+  label,
   onDropSlot,
 }: {
   capacity: 1 | 2 | 3;
   slots: DeviceSlot[];
+  code: string;
+  label: string;
   onDropSlot: (event: DragEvent, index: number) => void;
 }) {
-  const body = boxBodySize(capacity);
+  const size = boxSize(capacity);
   return (
     <div
-      className="box-body flex gap-1 rounded-sm border-2 border-zinc-500 bg-zinc-800 p-1"
-      style={{ width: body.width, height: body.height }}
+      className="box-body flex flex-col overflow-hidden rounded-sm border-2 border-zinc-500 bg-zinc-800"
+      style={{ width: size.width, height: size.height }}
     >
-      {slots.map((slot, index) => (
-        <div
-          key={index}
-          className="min-w-0 flex-1"
-          onDragOver={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-          }}
-          onDrop={(event) => onDropSlot(event, index)}
-        >
-          <DeviceGlyph device={slot.device} />
-        </div>
-      ))}
+      <LocationCaption code={code} label={label} />
+      <div className="flex min-h-0 flex-1 gap-1 p-1">
+        {slots.map((slot, index) => (
+          <div
+            key={index}
+            className="min-w-0 flex-1"
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+            onDrop={(event) => onDropSlot(event, index)}
+          >
+            <DeviceGlyph device={slot.device} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
 function PanelBody({
   breakers,
+  code,
+  label,
   onDropSlot,
 }: {
   breakers: BreakerSlot[];
+  code: string;
+  label: string;
   onDropSlot: (event: DragEvent, index: number) => void;
 }) {
   const rows: BreakerSlot[][] = [];
@@ -168,8 +180,12 @@ function PanelBody({
   }
   return (
     <div className="overflow-hidden rounded-sm border-2 border-zinc-400 bg-zinc-800">
+      <LocationCaption code={code} label={label} />
       {rows.map((row, rowIndex) => (
-        <div key={rowIndex} className="grid grid-cols-2 border-t border-zinc-600 first:border-t-0">
+        <div
+          key={rowIndex}
+          className={["grid grid-cols-2", rowIndex > 0 ? "border-t border-zinc-600" : ""].join(" ")}
+        >
           {row.map((slot, col) => {
             const index = rowIndex * 2 + col;
             return (
@@ -210,42 +226,48 @@ export function LocationNode({ id, data, selected }: NodeProps<Node<LocationNode
 
   if (data.kind === "panel") {
     return (
-      <div className={`${frame} w-[176px]`} onClick={chrome.onClick}>
+      <div className={frame} style={{ width: PANEL_WIDTH }} onClick={chrome.onClick}>
         <PanelHandles spaces={data.spaces} />
-        <Caption kind="panel" code={data.code} label={data.label} />
-        <PanelBody breakers={data.breakers} onDropSlot={chrome.onDeviceDrop} />
+        <PanelBody
+          breakers={data.breakers}
+          code={data.code}
+          label={data.label}
+          onDropSlot={chrome.onDeviceDrop}
+        />
       </div>
     );
   }
 
   if (data.kind === "external") {
+    const ref = data.externalRef.trim() || "Other drawing";
     return (
       <div
-        className={`${frame} w-[148px] rounded-sm border-2 border-dashed border-amber-600/80 bg-zinc-900/50 px-2 py-1.5`}
+        className={`${frame} overflow-hidden rounded-sm border-2 border-dashed border-amber-600/80 bg-zinc-900/50`}
+        style={{ width: EXTERNAL_SIZE.width, height: EXTERNAL_SIZE.height }}
         onClick={chrome.onClick}
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => chrome.onDeviceDrop(event)}
       >
         <BoxHandles />
-        <div className="muted flex items-center justify-between text-[10px] uppercase tracking-wide text-amber-500/90">
-          <span>Off-drawing</span>
-          <span className="rounded bg-zinc-800 px-1.5 font-mono text-[11px] text-zinc-200">
-            {data.code}
-          </span>
-        </div>
-        <div className="truncate text-sm font-semibold">{data.label}</div>
-        <div className="muted truncate text-xs text-zinc-400">
-          {data.externalRef.trim() || "Other drawing"}
+        <LocationCaption code={data.code} label={data.label} />
+        <div className="truncate px-1.5 pt-1 text-[10px] leading-tight text-zinc-400" title={ref}>
+          {ref}
         </div>
       </div>
     );
   }
 
+  const size = boxSize(data.capacity);
   return (
-    <div className={frame} onClick={chrome.onClick} style={{ width: GANG_UNIT * data.capacity }}>
+    <div className={frame} onClick={chrome.onClick} style={{ width: size.width }}>
       <BoxHandles />
-      <Caption kind="box" code={data.code} label={data.label} />
-      <BoxBody capacity={data.capacity} slots={data.slots} onDropSlot={chrome.onDeviceDrop} />
+      <BoxBody
+        capacity={data.capacity}
+        slots={data.slots}
+        code={data.code}
+        label={data.label}
+        onDropSlot={chrome.onDeviceDrop}
+      />
     </div>
   );
 }

@@ -8,7 +8,7 @@ This file is the source of truth for this branch. Open questions are called out 
 
 The left palette has four **Locations** (Panel, Box, Fixture, Note) and a **Cables** strip you click, then connect node-to-node.
 
-On the canvas, Panel / Box / Fixture are the same rounded card: kind, letter code, name, and one device from a dropdown. Cables are typed edges with 90° routes, end labels (`A1` / `To B2`), and colors. You cannot drag a cable type onto the board, and you cannot move an existing run from one box to another without deleting it.
+On the canvas, Panel / Box / Off-drawing show a one-line header inside the body (box code, then name; no kind badge). Boxes keep a 2×N device area under that strip. Cables are typed edges with 90° routes, end labels (`A1` / `To B2`), and colors.
 
 ## Palette direction
 
@@ -55,7 +55,7 @@ First set:
 
 **Kept for now:** 15A and 20A GFCI. They were already in the app and are common. Easy to drop if you do not want them.
 
-How a device looks *inside* the box (icons vs. full labels, mud-ring, etc.) is **later**. This pass: empty slots are visible, a placed device shows a simple symbol plus a short name, and the existing box code / name stay visible (name and code sit above the box body so the 2×N shape can stay honest).
+How a device looks *inside* the box (icons vs. full labels, mud-ring, etc.) is **later**. This pass: empty slots are visible, a placed device shows a simple symbol plus a short name, and the box code / name sit in a thin header strip at the top *inside* the box (code first, name truncated to one line; hover shows the full name). The 2×N device area stays below that strip.
 
 ### Cables
 
@@ -129,5 +129,6 @@ Answer these whenever. I will keep moving on the defaults above.
 - [x] Devices drop into slots
 - [x] Cable drag, snap, and reconnect
 - [x] README / PLAN / MILESTONES pointers
+- [x] In-box header: code + name, no kind badge
 
 Started on `feat/milestone-1-tweaks`. Existing milestone 1 drawings should keep opening after the version bump.
