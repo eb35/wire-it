@@ -13,40 +13,44 @@ import {
   type Node,
   type NodeChange,
 } from "@xyflow/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Point } from "../domain/types";
+import { useCallback, useEffect, useMemo, useState, type DragEvent } from "react";
+import { locationSize, nearestLocation } from "../domain/layout";
+import { PALETTE_MIME, parsePalette } from "../domain/palette";
+import type { Location, Point } from "../domain/types";
 import { useDiagramStore } from "../store/useDiagramStore";
 import { CableEdge, type CableEdgeData } from "./canvas/CableEdge";
 import { LocationNode, type LocationNodeData } from "./canvas/LocationNode";
 import { NoteNode } from "./canvas/NoteNode";
-import { isPaletteKind } from "./Palette";
 
 const nodeTypes = { location: LocationNode, note: NoteNode };
 const edgeTypes = { cable: CableEdge };
 
-function toNodes(
-  locations: {
-    id: string;
-    kind: LocationNodeData["kind"];
-    label: string;
-    code: string;
-    device: LocationNodeData["device"];
-    position: Point;
-  }[],
-  notes: { id: string; text: string; position: Point }[],
-): Node[] {
+function toLocationData(location: Location): LocationNodeData {
+  return {
+    kind: location.kind,
+    label: location.label,
+    code: location.code,
+    capacity: location.capacity,
+    slots: location.slots,
+    spaces: location.spaces,
+    breakers: location.breakers,
+    externalRef: location.externalRef,
+  };
+}
+
+function toNodes(locations: Location[], notes: { id: string; text: string; position: Point }[]): Node[] {
   return [
-    ...locations.map((location) => ({
-      id: location.id,
-      type: "location" as const,
-      position: location.position,
-      data: {
-        kind: location.kind,
-        label: location.label,
-        code: location.code,
-        device: location.device,
-      },
-    })),
+    ...locations.map((location) => {
+      const size = locationSize(location);
+      return {
+        id: location.id,
+        type: "location" as const,
+        position: location.position,
+        width: size.width,
+        height: size.height,
+        data: toLocationData(location),
+      };
+    }),
     ...notes.map((note) => ({
       id: note.id,
       type: "note" as const,
@@ -63,15 +67,16 @@ function DiagramCanvasInner() {
   const moveNode = useDiagramStore((state) => state.moveNode);
   const addLocation = useDiagramStore((state) => state.addLocation);
   const addNote = useDiagramStore((state) => state.addNote);
+  const placeDevice = useDiagramStore((state) => state.placeDevice);
+  const beginConnect = useDiagramStore((state) => state.beginConnect);
   const setSelection = useDiagramStore((state) => state.setSelection);
   const deleteSelection = useDiagramStore((state) => state.deleteSelection);
   const cancelConnect = useDiagramStore((state) => state.cancelConnect);
   const connectByHandles = useDiagramStore((state) => state.connectByHandles);
+  const reconnectCable = useDiagramStore((state) => state.reconnectCable);
   const { screenToFlowPosition } = useReactFlow();
 
-  const [nodes, setNodes] = useState<Node[]>(() =>
-    toNodes(project.locations, project.notes),
-  );
+  const [nodes, setNodes] = useState<Node[]>(() => toNodes(project.locations, project.notes));
 
   useEffect(() => {
     const selectedId = useDiagramStore.getState().selection?.id;
@@ -83,9 +88,7 @@ function DiagramCanvasInner() {
           ...node,
           selected: Boolean(prior?.selected || node.id === selectedId),
           position:
-            prior && "dragging" in prior && prior.dragging
-              ? prior.position
-              : node.position,
+            prior && "dragging" in prior && prior.dragging ? prior.position : node.position,
         };
       });
     });
@@ -100,6 +103,7 @@ function DiagramCanvasInner() {
         target: cable.target,
         sourceHandle: cable.sourceHandle,
         targetHandle: cable.targetHandle,
+        reconnectable: true,
         data: {
           type: cable.type,
           label: cable.label,
@@ -114,6 +118,37 @@ function DiagramCanvasInner() {
     setNodes((current) => applyNodeChanges(changes, current));
   }, []);
 
+  const dropAt = useCallback(
+    (event: DragEvent) => {
+      event.preventDefault();
+      const payload = parsePalette(event.dataTransfer.getData(PALETTE_MIME));
+      if (!payload) return;
+      const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      if (payload.section === "note") {
+        addNote(position);
+        return;
+      }
+      if (payload.section === "location") {
+        addLocation(
+          payload.kind === "box"
+            ? { kind: "box", capacity: payload.capacity }
+            : { kind: payload.kind },
+          position,
+        );
+        return;
+      }
+      const hit = nearestLocation(project.locations, position);
+      if (payload.section === "device") {
+        if (hit) placeDevice(hit.id, payload.device);
+        return;
+      }
+      if (payload.section === "cable") {
+        beginConnect(payload.type, hit?.id);
+      }
+    },
+    [addLocation, addNote, beginConnect, placeDevice, project.locations, screenToFlowPosition],
+  );
+
   return (
     <div
       className="relative min-h-0 min-w-0 flex-1"
@@ -121,14 +156,7 @@ function DiagramCanvasInner() {
         event.preventDefault();
         event.dataTransfer.dropEffect = "move";
       }}
-      onDrop={(event) => {
-        event.preventDefault();
-        const kind = event.dataTransfer.getData("application/wire-it");
-        if (!isPaletteKind(kind)) return;
-        const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-        if (kind === "note") addNote(position);
-        else addLocation(kind, position);
-      }}
+      onDrop={dropAt}
     >
       {connectType ? (
         <div className="pointer-events-none absolute left-3 top-3 z-10 rounded border border-sky-700 bg-zinc-950/90 px-2 py-1 text-xs text-sky-300">
@@ -162,6 +190,16 @@ function DiagramCanvasInner() {
             targetHandle: connection.targetHandle ?? "t-l1",
           });
         }}
+        onReconnect={(oldEdge, connection) => {
+          if (!connection.source || !connection.target) return;
+          reconnectCable(oldEdge.id, {
+            sourceId: connection.source,
+            targetId: connection.target,
+            sourceHandle: connection.sourceHandle ?? oldEdge.sourceHandle ?? "s-r1",
+            targetHandle: connection.targetHandle ?? oldEdge.targetHandle ?? "t-l1",
+          });
+        }}
+        edgesReconnectable
         isValidConnection={(connection) =>
           Boolean(connection.source && connection.target && connection.source !== connection.target)
         }

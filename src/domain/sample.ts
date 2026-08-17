@@ -1,8 +1,12 @@
+import { defaultBreakers, emptySlots } from "./location";
 import { emptyProject } from "./project";
 import type { Project } from "./types";
 
 export function sampleKitchen(): Project {
   const project = emptyProject("Kitchen lighting");
+  const breakers = defaultBreakers(12);
+  breakers[4] = { number: 5, label: "Kitchen island" };
+
   return {
     ...project,
     locations: [
@@ -11,32 +15,48 @@ export function sampleKitchen(): Project {
         kind: "panel",
         label: "Main panel",
         code: "P",
-        device: "none",
-        position: { x: 40, y: 200 },
+        position: { x: 40, y: 80 },
+        capacity: 1,
+        slots: emptySlots(1),
+        spaces: 12,
+        breakers,
+        externalRef: "",
       },
       {
         id: "loc_island",
         kind: "box",
         label: "Kitchen island",
         code: "A",
-        device: "duplex-outlet",
         position: { x: 460, y: 40 },
+        capacity: 2,
+        slots: [{ device: "duplex-15" }, { device: "empty" }],
+        spaces: 12,
+        breakers: defaultBreakers(12),
+        externalRef: "",
       },
       {
         id: "loc_hall",
         kind: "box",
         label: "Hall 3-way",
         code: "B",
-        device: "three-way",
-        position: { x: 200, y: 360 },
+        position: { x: 200, y: 420 },
+        capacity: 1,
+        slots: [{ device: "three-way" }],
+        spaces: 12,
+        breakers: defaultBreakers(12),
+        externalRef: "",
       },
       {
         id: "loc_porch",
-        kind: "fixture",
+        kind: "box",
         label: "Porch light",
         code: "C",
-        device: "light",
-        position: { x: 560, y: 360 },
+        position: { x: 560, y: 420 },
+        capacity: 1,
+        slots: [{ device: "light" }],
+        spaces: 12,
+        breakers: defaultBreakers(12),
+        externalRef: "",
       },
     ],
     cables: [
@@ -45,15 +65,15 @@ export function sampleKitchen(): Project {
         type: "12/2",
         source: "loc_panel",
         target: "loc_island",
-        sourceHandle: "s-r1",
+        sourceHandle: "s-brk-5",
         targetHandle: "t-l1",
-        sourcePort: "1",
+        sourcePort: "5",
         targetPort: "1",
-        label: "from brk 29",
+        label: "from brk 5",
         color: "sheath",
         waypoints: [
-          { x: 280, y: 240 },
-          { x: 280, y: 80 },
+          { x: 280, y: 220 },
+          { x: 280, y: 120 },
         ],
       },
       {
@@ -68,8 +88,8 @@ export function sampleKitchen(): Project {
         label: "",
         color: "blue",
         waypoints: [
-          { x: 400, y: 160 },
-          { x: 260, y: 160 },
+          { x: 400, y: 280 },
+          { x: 260, y: 280 },
         ],
       },
       {
@@ -84,8 +104,8 @@ export function sampleKitchen(): Project {
         label: "",
         color: "sheath",
         waypoints: [
-          { x: 394, y: 400 },
-          { x: 500, y: 400 },
+          { x: 394, y: 500 },
+          { x: 500, y: 500 },
         ],
       },
     ],
@@ -93,7 +113,7 @@ export function sampleKitchen(): Project {
       {
         id: "note_stairs",
         text: "Other 3-way is at the stairs. Red in the 12/3 is the traveler — not drawn yet.",
-        position: { x: 500, y: 180 },
+        position: { x: 500, y: 220 },
       },
     ],
   };

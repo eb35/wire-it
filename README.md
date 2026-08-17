@@ -35,9 +35,9 @@ Drawings autosave in this browser. Use **Export → JSON** if you want a file ba
 
 ## How to use it
 
-- **Palette (left):** drag a panel, box, fixture, or note onto the canvas. Click a cable type, then drag from a node on one box to a node on another (or click two boxes).
-- **Canvas:** drag boxes anywhere. Each box has a short code (A, B, …). Select a cable and drag the round pressure points — runs stay at 90 degrees. End labels read like `A1` / `To B2`.
-- **Inspector (right):** rename a box, set its code and device, set each end’s port number, and change cable type or color.
+- **Palette (left):** drag a panel, 1/2/3-gang box, off-drawing stub, or note onto the canvas. Drag a device into a box. Drag a cable type onto or near a box to start a run (or click the type, then connect two boxes).
+- **Canvas:** drag boxes anywhere. Each box has a short code (A, B, …). Select a cable and drag the round pressure points — runs stay at 90 degrees. Drag a cable end onto another box to move that run. End labels read like `A1` / `To B2`.
+- **Inspector (right):** rename a box, set its code, gangs, and devices (or panel breaker labels), set each end’s port number, and change cable type or color.
 - **Toolbar:** name the drawing, switch or create drawings, export JSON or a PNG (light or dark), import a JSON drawing.
 
 The first launch loads a sample **Kitchen lighting** drawing so the board is not empty.

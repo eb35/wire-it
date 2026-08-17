@@ -1,3 +1,5 @@
+import { locationCenter } from "./layout";
+import { nextPort } from "./ports";
 import type { Cable, Location, Point, Side } from "./types";
 
 const SIDES: Side[] = ["top", "right", "bottom", "left"];
@@ -31,11 +33,51 @@ export function facingSide(from: Point, to: Point): Side {
 }
 
 function nodeCenter(location: Location): Point {
-  return { x: location.position.x + 70, y: location.position.y + 40 };
+  return locationCenter(location);
+}
+
+export function breakerFromHandle(handle: string | null | undefined): string | null {
+  const match = handle?.match(/brk-(\d+)/);
+  return match?.[1] ?? null;
+}
+
+export function portForHandle(location: Location, handle: string, cables: Cable[]): string {
+  if (location.kind === "panel") {
+    return breakerFromHandle(handle) ?? nextPort(location.id, cables);
+  }
+  return nextPort(location.id, cables);
 }
 
 function firstFree(ids: string[], used: Set<string>): string {
   return ids.find((id) => !used.has(id)) ?? ids[0]!;
+}
+
+function usedHandles(locationId: string, role: "source" | "target", cables: Cable[]): Set<string> {
+  return new Set(
+    cables
+      .filter((cable) => (role === "source" ? cable.source : cable.target) === locationId)
+      .map((cable) => (role === "source" ? cable.sourceHandle : cable.targetHandle)),
+  );
+}
+
+function panelHandleIds(role: "source" | "target", spaces: number, preferSide: Side): string[] {
+  const prefix = role === "source" ? "s" : "t";
+  const numbers = Array.from({ length: spaces }, (_, index) => index + 1);
+  const preferOdd = preferSide === "left" || preferSide === "top";
+  const preferred = numbers.filter((number) => (number % 2 === 1) === preferOdd);
+  const rest = numbers.filter((number) => !preferred.includes(number));
+  return [...preferred, ...rest].map((number) => `${prefix}-brk-${number}`);
+}
+
+function handlesForLocation(
+  location: Location,
+  role: "source" | "target",
+  side: Side,
+): string[] {
+  if (location.kind === "panel") {
+    return panelHandleIds(role, location.spaces, side);
+  }
+  return handlesForSide(role, side);
 }
 
 export function pickHandles(
@@ -45,15 +87,15 @@ export function pickHandles(
 ): { sourceHandle: string; targetHandle: string; sourceSide: Side; targetSide: Side } {
   const sourceSide = facingSide(nodeCenter(source), nodeCenter(target));
   const targetSide = oppositeSide(sourceSide);
-  const usedSource = new Set(
-    cables.filter((cable) => cable.source === source.id).map((cable) => cable.sourceHandle),
-  );
-  const usedTarget = new Set(
-    cables.filter((cable) => cable.target === target.id).map((cable) => cable.targetHandle),
-  );
   return {
-    sourceHandle: firstFree(handlesForSide("source", sourceSide), usedSource),
-    targetHandle: firstFree(handlesForSide("target", targetSide), usedTarget),
+    sourceHandle: firstFree(
+      handlesForLocation(source, "source", sourceSide),
+      usedHandles(source.id, "source", cables),
+    ),
+    targetHandle: firstFree(
+      handlesForLocation(target, "target", targetSide),
+      usedHandles(target.id, "target", cables),
+    ),
     sourceSide,
     targetSide,
   };

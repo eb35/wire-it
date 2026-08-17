@@ -50,3 +50,8 @@ body {
 [data-export-theme="light"] .location-node .muted {
   color: #52525b !important;
 }
+
+[data-export-theme="light"] .box-body {
+  background: #e4e4e7 !important;
+  border-color: #71717a !important;
+}

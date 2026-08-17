@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { emptySlots, defaultBreakers } from "./location";
 import { nextLocationCode, nextPort, wireEndCopy, wireTag } from "./ports";
 import type { Cable, Location } from "./types";
 
@@ -7,8 +8,12 @@ const box = (id: string, code: string): Location => ({
   kind: "box",
   label: id,
   code,
-  device: "none",
   position: { x: 0, y: 0 },
+  capacity: 1,
+  slots: emptySlots(1),
+  spaces: 12,
+  breakers: defaultBreakers(12),
+  externalRef: "",
 });
 
 describe("ports", () => {

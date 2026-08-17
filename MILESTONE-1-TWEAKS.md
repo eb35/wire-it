@@ -123,11 +123,11 @@ Answer these whenever. I will keep moving on the defaults above.
 ## Progress
 
 - [x] This file and the feature branch
-- [ ] Model + v1 → v2 migration
-- [ ] Palette restructure
-- [ ] Panel / box / off-drawing looks
-- [ ] Devices drop into slots
-- [ ] Cable drag, snap, and reconnect
-- [ ] README / PLAN / MILESTONES pointers
+- [x] Model + v1 → v2 migration
+- [x] Palette restructure
+- [x] Panel / box / off-drawing looks (first pass; device art is still simple)
+- [x] Devices drop into slots
+- [x] Cable drag, snap, and reconnect
+- [x] README / PLAN / MILESTONES pointers
 
 Started on `feat/milestone-1-tweaks`. Existing milestone 1 drawings should keep opening after the version bump.

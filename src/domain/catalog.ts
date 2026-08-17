@@ -65,25 +65,66 @@ export function resolveCableColor(cable: Pick<Cable, "type" | "color">): string 
   return SHEATH_HEX[CABLE_CATALOG[cable.type].sheath];
 }
 
-export const DEVICE_OPTIONS: { id: DeviceType; label: string }[] = [
-  { id: "none", label: "Junction / none" },
-  { id: "duplex-outlet", label: "Duplex outlet" },
-  { id: "gfci-outlet", label: "GFCI outlet" },
-  { id: "single-pole", label: "Single-pole switch" },
-  { id: "three-way", label: "3-way switch" },
-  { id: "four-way", label: "4-way switch" },
-  { id: "light", label: "Light fixture" },
+export const DEVICE_OPTIONS: { id: DeviceType; label: string; hint: string }[] = [
+  { id: "empty", label: "Empty", hint: "Open gang" },
+  { id: "duplex-15", label: "15A duplex", hint: "Standard receptacle" },
+  { id: "duplex-20", label: "20A duplex", hint: "T-slot receptacle" },
+  { id: "single-outlet", label: "Single receptacle", hint: "One outlet" },
+  { id: "gfci-15", label: "15A GFCI", hint: "GFCI receptacle" },
+  { id: "gfci-20", label: "20A GFCI", hint: "GFCI receptacle" },
+  { id: "single-pole", label: "Single-pole", hint: "Switch" },
+  { id: "three-way", label: "3-way", hint: "Switch" },
+  { id: "four-way", label: "4-way", hint: "Switch" },
+  { id: "light", label: "Light", hint: "Fixture in a box" },
+  { id: "breaker", label: "Breaker", hint: "Panel space" },
 ];
 
-export const KIND_DEFAULTS: Record<
-  LocationKind,
-  { label: string; device: DeviceType }
-> = {
-  panel: { label: "Panel", device: "none" },
-  box: { label: "Box", device: "duplex-outlet" },
-  fixture: { label: "Fixture", device: "light" },
+export const PALETTE_DEVICES: DeviceType[] = [
+  "duplex-15",
+  "duplex-20",
+  "single-outlet",
+  "gfci-15",
+  "gfci-20",
+  "single-pole",
+  "three-way",
+  "four-way",
+  "light",
+  "breaker",
+];
+
+export const KIND_LABEL: Record<LocationKind, string> = {
+  panel: "Panel",
+  box: "Box",
+  external: "Off-drawing",
 };
 
 export function deviceLabel(device: DeviceType): string {
   return DEVICE_OPTIONS.find((item) => item.id === device)?.label ?? device;
+}
+
+export function deviceShort(device: DeviceType): string {
+  switch (device) {
+    case "empty":
+      return "";
+    case "duplex-15":
+      return "15A";
+    case "duplex-20":
+      return "20A";
+    case "single-outlet":
+      return "1×";
+    case "gfci-15":
+      return "G15";
+    case "gfci-20":
+      return "G20";
+    case "single-pole":
+      return "SP";
+    case "three-way":
+      return "3W";
+    case "four-way":
+      return "4W";
+    case "light":
+      return "LT";
+    case "breaker":
+      return "BRK";
+  }
 }
