@@ -20,7 +20,7 @@ flowchart LR
   end
 ```
 
-See [MILESTONES.md](./MILESTONES.md) for the numbered roadmap. See [README.md](./README.md) to run the app.
+See [MILESTONES.md](./MILESTONES.md) for the numbered roadmap. See [MILESTONE-1-TWEAKS.md](./MILESTONE-1-TWEAKS.md) for the first round of editor changes after milestone 1. See [README.md](./README.md) to run the app.
 
 ## Stack
 

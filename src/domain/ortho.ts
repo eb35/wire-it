@@ -1,6 +1,10 @@
 import type { Point, Side } from "./types";
 
 export function sideFromHandle(handleId: string): Side {
+  const breaker = handleId.match(/brk-(\d+)/);
+  if (breaker) {
+    return Number(breaker[1]) % 2 === 1 ? "left" : "right";
+  }
   const token = handleId.split("-")[1] ?? "r0";
   const letter = token[0];
   if (letter === "t") return "top";

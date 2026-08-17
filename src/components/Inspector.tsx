@@ -1,4 +1,5 @@
 import {
+  BOX_CAPACITIES,
   CABLE_TYPE_IDS,
   DEVICE_OPTIONS,
   WIRE_COLOR_IDS,
@@ -6,6 +7,7 @@ import {
   resolveCableColor,
   wireEndCopy,
 } from "../domain";
+import type { BoxCapacity, DeviceType } from "../domain/types";
 import { useDiagramStore } from "../store/useDiagramStore";
 
 export function Inspector() {
@@ -42,8 +44,8 @@ export function Inspector() {
         <div className="flex flex-col gap-2">
           <h2 className="text-sm font-semibold">Inspector</h2>
           <p className="text-xs text-zinc-500">
-            Select a box, cable, or note. Drag a box anywhere. Select a cable and drag the
-            round pressure points — runs stay at 90 degrees.
+            Select a box, cable, or note. Drag a device onto a box. Select a cable and drag an
+            end to another box to move it. Pressure points stay at 90 degrees.
           </p>
         </div>
       ) : null}
@@ -70,24 +72,93 @@ export function Inspector() {
               }
             />
           </label>
-          <label className="flex flex-col gap-1 text-xs text-zinc-500">
-            Device
-            <select
-              className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-sm text-zinc-100"
-              value={location.device}
-              onChange={(event) =>
-                updateLocation(location.id, {
-                  device: event.target.value as typeof location.device,
-                })
-              }
-            >
-              {DEVICE_OPTIONS.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
+
+          {location.kind === "box" ? (
+            <>
+              <label className="flex flex-col gap-1 text-xs text-zinc-500">
+                Gangs
+                <select
+                  className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-sm text-zinc-100"
+                  value={location.capacity}
+                  onChange={(event) =>
+                    updateLocation(location.id, {
+                      capacity: Number(event.target.value) as BoxCapacity,
+                    })
+                  }
+                >
+                  {BOX_CAPACITIES.map((capacity) => {
+                    const blocked =
+                      capacity < location.capacity &&
+                      location.slots.slice(capacity).some((slot) => slot.device !== "empty");
+                    return (
+                      <option key={capacity} value={capacity} disabled={blocked}>
+                        {capacity}-gang
+                        {blocked ? " (clear extra devices first)" : ""}
+                      </option>
+                    );
+                  })}
+                </select>
+              </label>
+              {location.slots.map((slot, index) => (
+                <label key={index} className="flex flex-col gap-1 text-xs text-zinc-500">
+                  Gang {index + 1}
+                  <select
+                    className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-sm text-zinc-100"
+                    value={slot.device}
+                    onChange={(event) => {
+                      const device = event.target.value as DeviceType;
+                      const slots = location.slots.map((item, i) =>
+                        i === index ? { device } : item,
+                      );
+                      updateLocation(location.id, { slots });
+                    }}
+                  >
+                    {DEVICE_OPTIONS.filter((option) => option.id !== "breaker").map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               ))}
-            </select>
-          </label>
+            </>
+          ) : null}
+
+          {location.kind === "panel" ? (
+            <div className="flex flex-col gap-2">
+              <div className="text-xs text-zinc-500">Breakers</div>
+              {location.breakers.map((slot, index) => (
+                <label key={slot.number} className="flex items-center gap-2 text-xs text-zinc-500">
+                  <span className="w-5 font-mono text-zinc-300">{slot.number}</span>
+                  <input
+                    className="min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-sm text-zinc-100"
+                    value={slot.label}
+                    placeholder="Label"
+                    onChange={(event) => {
+                      const breakers = location.breakers.map((item, i) =>
+                        i === index ? { ...item, label: event.target.value } : item,
+                      );
+                      updateLocation(location.id, { breakers });
+                    }}
+                  />
+                </label>
+              ))}
+            </div>
+          ) : null}
+
+          {location.kind === "external" ? (
+            <label className="flex flex-col gap-1 text-xs text-zinc-500">
+              Other drawing / room
+              <input
+                className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-sm text-zinc-100"
+                value={location.externalRef}
+                placeholder="Hall drawing, stairs 3-way…"
+                onChange={(event) =>
+                  updateLocation(location.id, { externalRef: event.target.value })
+                }
+              />
+            </label>
+          ) : null}
         </div>
       ) : null}
 
@@ -98,6 +169,9 @@ export function Inspector() {
             {wireEndCopy(cableSource.code, cable.sourcePort, cableTarget.code, cable.targetPort).title}
             <span className="text-zinc-500"> → </span>
             {wireEndCopy(cableTarget.code, cable.targetPort, cableSource.code, cable.sourcePort).title}
+          </p>
+          <p className="text-xs text-zinc-500">
+            Drag either end of this run onto another box to move it.
           </p>
           <label className="flex flex-col gap-1 text-xs text-zinc-500">
             Type
@@ -141,7 +215,7 @@ export function Inspector() {
             <input
               className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-sm text-zinc-100"
               value={cable.label}
-              placeholder="from brk 29"
+              placeholder="from brk 5"
               onChange={(event) => updateCable(cable.id, { label: event.target.value })}
             />
           </label>

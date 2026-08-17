@@ -1,17 +1,33 @@
-export const PROJECT_VERSION = 1 as const;
+export const PROJECT_VERSION = 2 as const;
+export const LEGACY_PROJECT_VERSION = 1 as const;
 
 export type CableTypeId = "14/2" | "14/3" | "12/2" | "12/3" | "10/2" | "10/3";
 
-export type LocationKind = "panel" | "box" | "fixture";
+export type LocationKind = "panel" | "box" | "external";
+
+export type BoxCapacity = 1 | 2 | 3;
 
 export type DeviceType =
-  | "none"
-  | "duplex-outlet"
-  | "gfci-outlet"
+  | "empty"
+  | "duplex-15"
+  | "duplex-20"
+  | "single-outlet"
+  | "gfci-15"
+  | "gfci-20"
   | "single-pole"
   | "three-way"
   | "four-way"
-  | "light";
+  | "light"
+  | "breaker";
+
+export type DeviceSlot = {
+  device: DeviceType;
+};
+
+export type BreakerSlot = {
+  number: number;
+  label: string;
+};
 
 export type ConductorColor = "black" | "white" | "red" | "bare";
 
@@ -35,8 +51,12 @@ export type Location = {
   kind: LocationKind;
   label: string;
   code: string;
-  device: DeviceType;
   position: Point;
+  capacity: BoxCapacity;
+  slots: DeviceSlot[];
+  spaces: number;
+  breakers: BreakerSlot[];
+  externalRef: string;
 };
 
 export type Cable = {

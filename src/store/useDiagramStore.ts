@@ -1,14 +1,20 @@
 import { create } from "zustand";
 import {
+  clampPanelSpaces,
   countCablesBetween,
   createId,
+  defaultBreakers,
+  emptySlots,
+  firstEmptySlot,
   initialWaypoints,
-  KIND_DEFAULTS,
+  locationDefaults,
   nextLocationCode,
-  nextPort,
+  padSlots,
   pickHandles,
+  portForHandle,
 } from "../domain";
 import type {
+  BoxCapacity,
   Cable,
   CableTypeId,
   DeviceType,
@@ -32,6 +38,16 @@ export type Selection =
   | { kind: "cable"; id: string }
   | { kind: "note"; id: string };
 
+type LocationPatch = {
+  label?: string;
+  code?: string;
+  capacity?: BoxCapacity;
+  slots?: Location["slots"];
+  spaces?: number;
+  breakers?: Location["breakers"];
+  externalRef?: string;
+};
+
 type DiagramState = {
   library: Library;
   project: Project;
@@ -42,17 +58,18 @@ type DiagramState = {
   newDrawing: () => void;
   switchDrawing: (id: string) => void;
   deleteDrawing: (id: string) => void;
-  addLocation: (kind: LocationKind, position: Point) => void;
-  updateLocation: (
-    id: string,
-    patch: { label?: string; device?: DeviceType; code?: string },
+  addLocation: (
+    input: { kind: LocationKind; capacity?: BoxCapacity },
+    position: Point,
   ) => void;
+  updateLocation: (id: string, patch: LocationPatch) => void;
+  placeDevice: (locationId: string, device: DeviceType, slotIndex?: number) => void;
   moveNode: (id: string, position: Point) => void;
   deleteLocation: (id: string) => void;
   addNote: (position: Point) => void;
   updateNote: (id: string, text: string) => void;
   deleteNote: (id: string) => void;
-  beginConnect: (type: CableTypeId) => void;
+  beginConnect: (type: CableTypeId, fromId?: string) => void;
   clickLocationForConnect: (locationId: string) => void;
   connectByHandles: (input: {
     sourceId: string;
@@ -60,6 +77,15 @@ type DiagramState = {
     sourceHandle: string;
     targetHandle: string;
   }) => void;
+  reconnectCable: (
+    id: string,
+    input: {
+      sourceId: string;
+      targetId: string;
+      sourceHandle: string;
+      targetHandle: string;
+    },
+  ) => void;
   cancelConnect: () => void;
   updateCable: (
     id: string,
@@ -95,12 +121,29 @@ function makeCable(
     target: target.id,
     sourceHandle,
     targetHandle,
-    sourcePort: nextPort(source.id, project.cables),
-    targetPort: nextPort(target.id, project.cables),
+    sourcePort: portForHandle(source, sourceHandle, project.cables),
+    targetPort: portForHandle(target, targetHandle, project.cables),
     label: "",
     color: "sheath",
     waypoints: initialWaypoints(source, target, existing),
   };
+}
+
+function applyLocationPatch(item: Location, patch: LocationPatch): Location {
+  const next = { ...item, ...patch };
+  if (patch.capacity && patch.capacity !== item.capacity) {
+    next.slots = padSlots(item.slots, patch.capacity);
+  }
+  if (patch.spaces && patch.spaces !== item.spaces) {
+    const spaces = clampPanelSpaces(patch.spaces);
+    next.spaces = spaces;
+    next.breakers = defaultBreakers(spaces).map((slot, index) => ({
+      ...slot,
+      label: item.breakers[index]?.label ?? "",
+      number: item.breakers[index]?.number ?? slot.number,
+    }));
+  }
+  return next;
 }
 
 const loaded = loadWorkspace();
@@ -172,16 +215,21 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
     });
   },
 
-  addLocation: (kind, position) => {
+  addLocation: (input, position) => {
     const { library, project } = get();
-    const defaults = KIND_DEFAULTS[kind];
-    const location = {
+    const defaults = locationDefaults(input.kind);
+    const capacity = input.kind === "box" && input.capacity ? input.capacity : defaults.capacity;
+    const location: Location = {
       id: createId("loc"),
-      kind,
+      kind: input.kind,
       label: defaults.label,
       code: nextLocationCode(project.locations),
-      device: defaults.device,
       position,
+      capacity,
+      slots: emptySlots(capacity),
+      spaces: defaults.spaces,
+      breakers: defaultBreakers(defaults.spaces),
+      externalRef: "",
     };
     set({
       ...persist(library, { ...project, locations: [...project.locations, location] }),
@@ -195,7 +243,43 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
       persist(library, {
         ...project,
         locations: project.locations.map((item) =>
-          item.id === id ? { ...item, ...patch } : item,
+          item.id === id ? applyLocationPatch(item, patch) : item,
+        ),
+      }),
+    );
+  },
+
+  placeDevice: (locationId, device, slotIndex) => {
+    const { library, project } = get();
+    const location = project.locations.find((item) => item.id === locationId);
+    if (!location) return;
+
+    if (location.kind === "panel") {
+      if (device !== "breaker") return;
+      const index = slotIndex ?? location.breakers.findIndex((slot) => !slot.label.trim());
+      const target = index >= 0 ? index : 0;
+      const breakers = location.breakers.map((slot, i) =>
+        i === target ? { ...slot, label: slot.label.trim() || "Circuit" } : slot,
+      );
+      set(
+        persist(library, {
+          ...project,
+          locations: project.locations.map((item) =>
+            item.id === locationId ? { ...item, breakers } : item,
+          ),
+        }),
+      );
+      return;
+    }
+
+    if (location.kind !== "box" || device === "breaker") return;
+    const index = slotIndex ?? firstEmptySlot(location);
+    const slots = location.slots.map((slot, i) => (i === index ? { device } : slot));
+    set(
+      persist(library, {
+        ...project,
+        locations: project.locations.map((item) =>
+          item.id === locationId ? { ...item, slots } : item,
         ),
       }),
     );
@@ -264,8 +348,8 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
     });
   },
 
-  beginConnect: (type) => {
-    set({ connectType: type, connectFrom: null, selection: null });
+  beginConnect: (type, fromId) => {
+    set({ connectType: type, connectFrom: fromId ?? null, selection: null });
   },
 
   clickLocationForConnect: (locationId) => {
@@ -317,6 +401,37 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
       ...persist(library, { ...project, cables: [...project.cables, cable] }),
       selection: { kind: "cable", id: cable.id },
     });
+  },
+
+  reconnectCable: (id, { sourceId, targetId, sourceHandle, targetHandle }) => {
+    const { library, project } = get();
+    if (sourceId === targetId) return;
+    const cable = project.cables.find((item) => item.id === id);
+    const source = project.locations.find((item) => item.id === sourceId);
+    const target = project.locations.find((item) => item.id === targetId);
+    if (!cable || !source || !target) return;
+    const others = project.cables.filter((item) => item.id !== id);
+    const sourceChanged = cable.source !== sourceId || cable.sourceHandle !== sourceHandle;
+    const targetChanged = cable.target !== targetId || cable.targetHandle !== targetHandle;
+    const next: Cable = {
+      ...cable,
+      source: sourceId,
+      target: targetId,
+      sourceHandle,
+      targetHandle,
+      sourcePort: sourceChanged ? portForHandle(source, sourceHandle, others) : cable.sourcePort,
+      targetPort: targetChanged ? portForHandle(target, targetHandle, others) : cable.targetPort,
+      waypoints:
+        cable.source !== sourceId || cable.target !== targetId
+          ? initialWaypoints(source, target, countCablesBetween(others, sourceId, targetId))
+          : cable.waypoints,
+    };
+    set(
+      persist(library, {
+        ...project,
+        cables: project.cables.map((item) => (item.id === id ? next : item)),
+      }),
+    );
   },
 
   cancelConnect: () => set({ connectType: null, connectFrom: null }),

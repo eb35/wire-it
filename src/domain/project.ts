@@ -1,18 +1,30 @@
 import { CABLE_TYPE_IDS } from "./catalog";
 import { createId } from "./id";
+import {
+  clampPanelSpaces,
+  defaultBreakers,
+  emptySlots,
+  isBoxCapacity,
+  locationDefaults,
+  migrateLegacyDevice,
+  migrateLegacyKind,
+  padSlots,
+} from "./location";
 import { nextLocationCode } from "./ports";
 import type {
+  BoxCapacity,
+  BreakerSlot,
   Cable,
   CableTypeId,
+  DeviceSlot,
   DeviceType,
   Location,
-  LocationKind,
   Note,
   Point,
   Project,
   WireColorId,
 } from "./types";
-import { PROJECT_VERSION } from "./types";
+import { LEGACY_PROJECT_VERSION, PROJECT_VERSION } from "./types";
 
 const WIRE_COLOR_IDS = new Set<WireColorId>([
   "sheath",
@@ -24,17 +36,6 @@ const WIRE_COLOR_IDS = new Set<WireColorId>([
   "green",
   "purple",
   "gray",
-]);
-
-const LOCATION_KINDS = new Set<LocationKind>(["panel", "box", "fixture"]);
-const DEVICES = new Set<DeviceType>([
-  "none",
-  "duplex-outlet",
-  "gfci-outlet",
-  "single-pole",
-  "three-way",
-  "four-way",
-  "light",
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -56,8 +57,67 @@ export function emptyProject(name = "Untitled"): Project {
   };
 }
 
+function parseSlots(raw: unknown, capacity: BoxCapacity, fallback: DeviceType): DeviceSlot[] {
+  if (!Array.isArray(raw)) {
+    const slots = emptySlots(capacity);
+    slots[0] = { device: fallback };
+    return slots;
+  }
+  const slots = raw.map((item) => {
+    if (isRecord(item) && typeof item.device === "string") {
+      return { device: migrateLegacyDevice(item.device) };
+    }
+    if (typeof item === "string") return { device: migrateLegacyDevice(item) };
+    return { device: "empty" as const };
+  });
+  return padSlots(slots, capacity);
+}
+
+function parseBreakers(raw: unknown, spaces: number): BreakerSlot[] {
+  const fallback = defaultBreakers(spaces);
+  if (!Array.isArray(raw)) return fallback;
+  return fallback.map((slot, index) => {
+    const item = raw[index];
+    if (!isRecord(item)) return slot;
+    return {
+      number: typeof item.number === "number" ? item.number : slot.number,
+      label: typeof item.label === "string" ? item.label : "",
+    };
+  });
+}
+
+function parseLocation(item: unknown, index: number, used: Location[]): Location {
+  if (!isRecord(item) || typeof item.id !== "string" || typeof item.label !== "string" || !isPoint(item.position)) {
+    throw new Error(`Location ${index + 1} is invalid.`);
+  }
+  const kind = migrateLegacyKind(item.kind as string);
+  if (!kind) {
+    throw new Error(`Location ${index + 1} is invalid.`);
+  }
+  const defaults = locationDefaults(kind);
+  const capacity = kind === "box" && isBoxCapacity(item.capacity) ? item.capacity : defaults.capacity;
+  const fallbackDevice = migrateLegacyDevice(typeof item.device === "string" ? item.device : "empty");
+  const spaces = kind === "panel" && typeof item.spaces === "number" ? clampPanelSpaces(item.spaces) : defaults.spaces;
+
+  return {
+    id: item.id,
+    kind,
+    label: item.label,
+    code:
+      typeof item.code === "string" && item.code.trim()
+        ? item.code.trim().toUpperCase()
+        : nextLocationCode(used),
+    position: item.position,
+    capacity,
+    slots: kind === "box" ? parseSlots(item.slots, capacity, fallbackDevice) : emptySlots(1),
+    spaces,
+    breakers: kind === "panel" ? parseBreakers(item.breakers, spaces) : defaultBreakers(defaults.spaces),
+    externalRef: typeof item.externalRef === "string" ? item.externalRef : "",
+  };
+}
+
 export function parseProject(raw: unknown): Project {
-  if (!isRecord(raw) || raw.version !== PROJECT_VERSION) {
+  if (!isRecord(raw) || (raw.version !== PROJECT_VERSION && raw.version !== LEGACY_PROJECT_VERSION)) {
     throw new Error("This file is not a Wire-it drawing (unexpected version).");
   }
   if (typeof raw.id !== "string" || typeof raw.name !== "string") {
@@ -69,31 +129,11 @@ export function parseProject(raw: unknown): Project {
 
   const locations: Location[] = [];
   raw.locations.forEach((item, index) => {
-    if (
-      !isRecord(item) ||
-      typeof item.id !== "string" ||
-      typeof item.label !== "string" ||
-      !LOCATION_KINDS.has(item.kind as LocationKind) ||
-      !DEVICES.has(item.device as DeviceType) ||
-      !isPoint(item.position)
-    ) {
-      throw new Error(`Location ${index + 1} is invalid.`);
-    }
-    locations.push({
-      id: item.id,
-      kind: item.kind as LocationKind,
-      label: item.label,
-      code:
-        typeof item.code === "string" && item.code.trim()
-          ? item.code.trim().toUpperCase()
-          : nextLocationCode(locations),
-      device: item.device as DeviceType,
-      position: item.position,
-    });
+    locations.push(parseLocation(item, index, locations));
   });
 
   const locationIds = new Set(locations.map((location) => location.id));
-  const cables: Cable[] = raw.cables.map((item, index) => {
+  const rawCables: Cable[] = raw.cables.map((item, index) => {
     if (
       !isRecord(item) ||
       typeof item.id !== "string" ||
@@ -144,14 +184,89 @@ export function parseProject(raw: unknown): Project {
     return { id: item.id, text: item.text, position: item.position };
   });
 
+  const { locations: nextLocations, cables } = attachPanelCables(locations, rawCables);
+
   return {
     version: PROJECT_VERSION,
     id: raw.id,
     name: raw.name,
-    locations,
+    locations: nextLocations,
     cables,
     notes,
   };
+}
+
+function panelNumber(port: string, handle: string): number | null {
+  const fromHandle = Number(handle.match(/brk-(\d+)/)?.[1] ?? "");
+  if (Number.isFinite(fromHandle) && fromHandle > 0) return fromHandle;
+  const fromPort = Number(port);
+  if (Number.isFinite(fromPort) && fromPort > 0) return fromPort;
+  return null;
+}
+
+function panelHandle(handle: string, number: number): string {
+  if (handle.includes("brk-")) return handle;
+  const prefix = handle.startsWith("t-") ? "t" : "s";
+  return `${prefix}-brk-${number}`;
+}
+
+function attachPanelCables(
+  locations: Location[],
+  cables: Cable[],
+): { locations: Location[]; cables: Cable[] } {
+  const needed = new Map<string, number>();
+  for (const location of locations) {
+    if (location.kind === "panel") needed.set(location.id, location.spaces);
+  }
+  for (const cable of cables) {
+    for (const [id, port, handle] of [
+      [cable.source, cable.sourcePort, cable.sourceHandle],
+      [cable.target, cable.targetPort, cable.targetHandle],
+    ] as const) {
+      const current = needed.get(id);
+      if (current === undefined) continue;
+      const number = panelNumber(port, handle);
+      if (number) needed.set(id, Math.max(current, number));
+    }
+  }
+
+  const nextLocations = locations.map((location) => {
+    const spaces = needed.get(location.id);
+    if (!spaces || spaces === location.spaces) return location;
+    const even = clampPanelSpaces(spaces % 2 === 0 ? spaces : spaces + 1);
+    return {
+      ...location,
+      spaces: even,
+      breakers: defaultBreakers(even).map((slot, index) => ({
+        ...slot,
+        label: location.breakers[index]?.label ?? "",
+        number: location.breakers[index]?.number ?? slot.number,
+      })),
+    };
+  });
+
+  const byId = new Map(nextLocations.map((location) => [location.id, location]));
+  const nextCables = cables.map((cable) => {
+    const source = byId.get(cable.source);
+    const target = byId.get(cable.target);
+    let sourceHandle = cable.sourceHandle;
+    let sourcePort = cable.sourcePort;
+    let targetHandle = cable.targetHandle;
+    let targetPort = cable.targetPort;
+    if (source?.kind === "panel") {
+      const number = panelNumber(cable.sourcePort, cable.sourceHandle) ?? 1;
+      sourceHandle = panelHandle(cable.sourceHandle, number);
+      sourcePort = String(number);
+    }
+    if (target?.kind === "panel") {
+      const number = panelNumber(cable.targetPort, cable.targetHandle) ?? 1;
+      targetHandle = panelHandle(cable.targetHandle, number);
+      targetPort = String(number);
+    }
+    return { ...cable, sourceHandle, targetHandle, sourcePort, targetPort };
+  });
+
+  return { locations: nextLocations, cables: nextCables };
 }
 
 export function downloadJson(project: Project): void {
