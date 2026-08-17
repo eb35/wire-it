@@ -9,6 +9,7 @@ import {
   formatBreakerHandle,
   formatHandle,
   locationDefaults,
+  uniqueBoxHandle,
   locationRect,
   nearestLocation,
   nextLocationCode,
@@ -61,6 +62,7 @@ type DiagramState = {
   selection: Selection | null;
   connectType: CableTypeId | null;
   connectFrom: string | null;
+  draggingCableEnd: { cableId: string; end: "source" | "target" } | null;
   setProjectName: (name: string) => void;
   newDrawing: () => void;
   switchDrawing: (id: string) => void;
@@ -98,6 +100,7 @@ type DiagramState = {
   attachLooseEnd: (id: string, targetId: string, targetHandle?: string | null) => void;
   slideLanding: (id: string, end: "source" | "target", point: Point) => void;
   dropCableEnd: (id: string, end: "source" | "target", point: Point) => void;
+  setDraggingCableEnd: (value: { cableId: string; end: "source" | "target" } | null) => void;
   cancelConnect: () => void;
   updateCable: (
     id: string,
@@ -191,6 +194,7 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
   selection: null,
   connectType: null,
   connectFrom: null,
+  draggingCableEnd: null,
 
   setProjectName: (name) => {
     const { library, project } = get();
@@ -518,7 +522,7 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
     const handle =
       source.kind === "panel" && parsed.breaker
         ? formatBreakerHandle("source", parsed.breaker)
-        : formatHandle("source", parsed.side, parsed.t);
+        : uniqueBoxHandle("source", parsed.side, parsed.t, source.id, project.cables);
     const cable: Cable = {
       id: createId("cab"),
       type: connectType ?? "12/2",
@@ -612,7 +616,7 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
     const { library, project } = get();
     const cable = project.cables.find((item) => item.id === id);
     if (!cable) return;
-    const hit = nearestLocation(project.locations, point, 56);
+    const hit = nearestLocation(project.locations, point);
     const others = project.cables.filter((item) => item.id !== id);
 
     if (!hit) {
@@ -664,10 +668,11 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
     if (end === "target" && hit.id === cable.source) return;
 
     const role = end === "source" ? "source" : "target";
+    const landing = projectToPerimeter(locationRect(hit), point);
     const handle =
       hit.kind === "panel"
         ? nearestBreakerHandle(hit, role, point)
-        : formatHandle(role, projectToPerimeter(locationRect(hit), point).side, projectToPerimeter(locationRect(hit), point).t);
+        : uniqueBoxHandle(role, landing.side, landing.t, hit.id, others);
 
     const next: Cable = {
       ...cable,
@@ -695,7 +700,9 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
     );
   },
 
-  cancelConnect: () => set({ connectType: null, connectFrom: null }),
+  cancelConnect: () => set({ connectType: null, connectFrom: null, draggingCableEnd: null }),
+
+  setDraggingCableEnd: (value) => set({ draggingCableEnd: value }),
 
   updateCable: (id, patch) => {
     const { library, project } = get();

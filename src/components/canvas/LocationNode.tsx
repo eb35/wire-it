@@ -82,7 +82,11 @@ function LandingSlide({
 
 function BoxHandles({ id }: { id: string }) {
   const cables = useDiagramStore((state) => state.project.cables);
+  const selectedCableId = useDiagramStore((state) =>
+    state.selection?.kind === "cable" ? state.selection.id : null,
+  );
   const landings = landingsForLocation(id, cables);
+  const seenHandles = new Set<string>();
   return (
     <>
       {STRIP_SIDES.map((side) => (
@@ -105,23 +109,27 @@ function BoxHandles({ id }: { id: string }) {
       ))}
       {landings.map((landing) => {
         const placed = handleStyle(landing.side, landing.t);
-        const cableId =
-          cables.find((cable) =>
-            landing.role === "source"
-              ? cable.source === id && cable.sourceHandle === landing.handleId
-              : cable.target === id && cable.targetHandle === landing.handleId,
-          )?.id ?? "";
+        const handleKey = `${landing.handleId}-${landing.role}`;
+        const renderHandle = !seenHandles.has(handleKey);
+        seenHandles.add(handleKey);
         return (
-          <span key={`${landing.handleId}-${landing.role}`}>
-            <Handle
-              type={landing.role}
-              id={landing.handleId}
-              position={SIDE_POSITION[placed.position]}
-              style={placed.style}
-            />
-            {cableId ? (
-              <LandingSlide cableId={cableId} end={landing.role} side={landing.side} t={landing.t} />
+          <span key={`${landing.cableId}-${landing.role}`}>
+            {renderHandle ? (
+              <Handle
+                type={landing.role}
+                id={landing.handleId}
+                position={SIDE_POSITION[placed.position]}
+                style={placed.style}
+              />
             ) : null}
+            {landing.cableId === selectedCableId ? null : (
+              <LandingSlide
+                cableId={landing.cableId}
+                end={landing.role}
+                side={landing.side}
+                t={landing.t}
+              />
+            )}
           </span>
         );
       })}
@@ -167,10 +175,12 @@ function LocationCaption({ code, label }: { code: string; label: string }) {
 function useLocationChrome(id: string) {
   const connectType = useDiagramStore((state) => state.connectType);
   const connectFrom = useDiagramStore((state) => state.connectFrom);
+  const draggingCableEnd = useDiagramStore((state) => state.draggingCableEnd);
   const clickLocationForConnect = useDiagramStore((state) => state.clickLocationForConnect);
   const placeDevice = useDiagramStore((state) => state.placeDevice);
   return {
     connectType,
+    snapReady: Boolean(connectType || draggingCableEnd),
     pending: connectFrom === id,
     onClick: (event: MouseEvent) => {
       if (!connectType) return;
@@ -283,7 +293,7 @@ export function LocationNode({ id, data, selected }: NodeProps<Node<LocationNode
     "location-node group relative text-left shadow-none",
     selected ? "ring-2 ring-sky-400" : "",
     chrome.pending ? "ring-2 ring-sky-400" : "",
-    chrome.connectType ? "connect-ready" : "",
+    chrome.snapReady ? "connect-ready" : "",
     "text-zinc-100",
   ].join(" ");
 

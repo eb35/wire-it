@@ -43,9 +43,12 @@ body {
   opacity: 1;
 }
 
-.location-node.connect-ready .side-strip,
 .location-node:hover .side-strip {
-  opacity: 0.35;
+  opacity: 0.4;
+}
+
+.location-node.connect-ready .side-strip {
+  opacity: 0.75;
 }
 
 [data-export-theme="light"] .react-flow {

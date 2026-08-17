@@ -1,3 +1,4 @@
+import { GRID_SIZE } from "./layout";
 import type { Point, Side } from "./types";
 
 export function stubPoint(point: Point, side: Side, length = 24): Point {
@@ -165,6 +166,19 @@ export function movePathSegment(path: Point[], segmentIndex: number, pointer: Po
     if (segmentIndex + 1 < last) next[segmentIndex + 1] = { x: pointer.x, y: b.y };
   }
   return collapseNearColinear(next).slice(1, -1);
+}
+
+export function insertBendOnSegment(path: Point[], segmentIndex: number, offset = GRID_SIZE): Point[] {
+  if (path.length < 2) return [];
+  const last = path.length - 1;
+  if (segmentIndex < 0 || segmentIndex >= last) return path.slice(1, -1);
+  const a = path[segmentIndex]!;
+  const b = path[segmentIndex + 1]!;
+  const mid = segmentMid(a, b);
+  const pointer = isHorizontalSegment(a, b)
+    ? { x: mid.x, y: mid.y + offset }
+    : { x: mid.x + offset, y: mid.y };
+  return movePathSegment(path, segmentIndex, pointer);
 }
 
 export function removePathVertex(path: Point[], vertexIndex: number): Point[] {

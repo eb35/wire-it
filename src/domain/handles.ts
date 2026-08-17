@@ -1,6 +1,14 @@
 import { PANEL_HEADER, PANEL_ROW, panelSize } from "./layout";
 import { nextPort } from "./ports";
-import { alignedHandleT, facingSides, locationRect, pointOnSide, sidePairScore } from "./route";
+import {
+  alignedHandleT,
+  clampHandleT,
+  facingSides,
+  HANDLE_MARGIN,
+  locationRect,
+  pointOnSide,
+  sidePairScore,
+} from "./route";
 import type { Cable, Location, Point, Side } from "./types";
 
 const SIDES: Side[] = ["top", "right", "bottom", "left"];
@@ -29,6 +37,14 @@ export type ParsedHandle = {
   id: string;
 };
 
+export type LocationLanding = {
+  cableId: string;
+  handleId: string;
+  role: "source" | "target";
+  side: Side;
+  t: number;
+};
+
 export function oppositeSide(side: Side): Side {
   switch (side) {
     case "top":
@@ -45,6 +61,26 @@ export function oppositeSide(side: Side): Side {
 export function formatHandle(role: "source" | "target", side: Side, t: number): string {
   const prefix = role === "source" ? "s" : "t";
   return `${prefix}-${LETTER[side]}-${Math.round(Math.min(1, Math.max(0, t)) * 100)}`;
+}
+
+export function uniqueBoxHandle(
+  role: "source" | "target",
+  side: Side,
+  t: number,
+  locationId: string,
+  cables: Cable[],
+): string {
+  const used = usedHandles(locationId, role, cables);
+  const min = Math.round(HANDLE_MARGIN * 100);
+  const max = Math.round((1 - HANDLE_MARGIN) * 100);
+  const start = Math.round(clampHandleT(t) * 100);
+  for (let i = 0; i <= max - min; i += 1) {
+    const delta = i === 0 ? 0 : Math.ceil(i / 2) * (i % 2 === 0 ? 1 : -1);
+    const pct = Math.min(max, Math.max(min, start + delta));
+    const id = formatHandle(role, side, pct / 100);
+    if (!used.has(id)) return id;
+  }
+  return formatHandle(role, side, t);
 }
 
 export function formatBreakerHandle(role: "source" | "target", number: number): string {
@@ -240,8 +276,10 @@ export function pickConnection(
           usedHandles(source.id, "source", cables),
         );
     sourceSide = parseHandle(sourceHandle).side;
-  } else {
+  } else if (sourceLocked) {
     sourceHandle = formatHandle("source", sourceSide, sourceT);
+  } else {
+    sourceHandle = uniqueBoxHandle("source", sourceSide, sourceT, source.id, cables);
   }
 
   if (target.kind === "panel") {
@@ -252,8 +290,10 @@ export function pickConnection(
           usedHandles(target.id, "target", cables),
         );
     targetSide = parseHandle(targetHandle).side;
-  } else {
+  } else if (targetLocked) {
     targetHandle = formatHandle("target", targetSide, targetT);
+  } else {
+    targetHandle = uniqueBoxHandle("target", targetSide, targetT, target.id, cables);
   }
 
   return { sourceHandle, targetHandle, sourceSide, targetSide };
@@ -292,15 +332,13 @@ export function cableLane(cables: Cable[], cable: Cable): number {
   return Math.max(0, index);
 }
 
-export function landingsForLocation(
-  locationId: string,
-  cables: Cable[],
-): { handleId: string; role: "source" | "target"; side: Side; t: number }[] {
-  const landings: { handleId: string; role: "source" | "target"; side: Side; t: number }[] = [];
+export function landingsForLocation(locationId: string, cables: Cable[]): LocationLanding[] {
+  const landings: LocationLanding[] = [];
   for (const cable of cables) {
     if (cable.source === locationId) {
       const parsed = parseHandle(cable.sourceHandle);
       landings.push({
+        cableId: cable.id,
         handleId: cable.sourceHandle,
         role: "source",
         side: parsed.side,
@@ -310,6 +348,7 @@ export function landingsForLocation(
     if (cable.target === locationId) {
       const parsed = parseHandle(cable.targetHandle);
       landings.push({
+        cableId: cable.id,
         handleId: cable.targetHandle,
         role: "target",
         side: parsed.side,

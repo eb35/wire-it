@@ -44,8 +44,9 @@ export function Inspector() {
         <div className="flex flex-col gap-2">
           <h2 className="text-sm font-semibold">Inspector</h2>
           <p className="text-xs text-zinc-500">
-            Select a box, cable, or note. Drag a device onto a box. Hover a cable to bend it.
-            Drag a landing along a box edge, or drop a run on empty canvas for a loose end.
+            Select a box, cable, or note. Click a cable to edit it: drag the blue end
+            dots to another box or onto empty canvas, click a hollow mid-point to add a
+            90° bend, and click × on a corner to remove it.
           </p>
         </div>
       ) : null}
@@ -210,8 +211,9 @@ export function Inspector() {
             </label>
           ) : null}
           <p className="text-xs text-zinc-500">
-            End labels follow the run as a single line. The type and this note repeat along the
-            wire.
+            Blue end dots reattach this run. Hollow mid-points add a 90° bend. Click × on a
+            corner to remove it. End labels follow the run as a single line; the type and this
+            note repeat along the wire.
           </p>
           <label className="flex flex-col gap-1 text-xs text-zinc-500">
             Note

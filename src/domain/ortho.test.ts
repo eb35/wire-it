@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildOrthoPath, collapseColinear, moveOrthoSegment } from "./ortho";
+import { buildOrthoPath, collapseColinear, insertBendOnSegment, moveOrthoSegment } from "./ortho";
 
 describe("ortho", () => {
   it("never produces a diagonal segment", () => {
@@ -29,6 +29,21 @@ describe("ortho", () => {
       { x: 0, y: 0 },
       { x: 20, y: 0 },
       { x: 20, y: 5 },
+    ]);
+  });
+
+  it("turns a straight run into a 90 degree jog", () => {
+    const next = insertBendOnSegment(
+      [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+      ],
+      0,
+      20,
+    );
+    expect(next).toEqual([
+      { x: 0, y: 20 },
+      { x: 100, y: 20 },
     ]);
   });
 

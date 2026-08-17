@@ -81,6 +81,7 @@ function DiagramCanvasInner() {
   const project = useDiagramStore((state) => state.project);
   const connectType = useDiagramStore((state) => state.connectType);
   const connectFrom = useDiagramStore((state) => state.connectFrom);
+  const selection = useDiagramStore((state) => state.selection);
   const moveNode = useDiagramStore((state) => state.moveNode);
   const addLocation = useDiagramStore((state) => state.addLocation);
   const addNote = useDiagramStore((state) => state.addNote);
@@ -99,39 +100,49 @@ function DiagramCanvasInner() {
   );
 
   useEffect(() => {
-    const selectedId = useDiagramStore.getState().selection?.id;
+    const currentSelection = useDiagramStore.getState().selection;
     setNodes((current) => {
       const previous = new Map(current.map((node) => [node.id, node]));
       return toNodes(project.locations, project.notes, project.cables).map((node) => {
         const prior = previous.get(node.id);
+        const selected =
+          node.type === "loose"
+            ? currentSelection?.kind === "cable" && node.id === `loose:${currentSelection.id}`
+            : (currentSelection?.kind === "location" || currentSelection?.kind === "note") &&
+              node.id === currentSelection.id;
         return {
           ...node,
-          selected: Boolean(prior?.selected || node.id === selectedId),
+          selected,
           position:
             prior && "dragging" in prior && prior.dragging ? prior.position : node.position,
         };
       });
     });
-  }, [project.id, project.locations, project.notes, project.cables]);
+  }, [project.id, project.locations, project.notes, project.cables, selection]);
 
   const edges = useMemo<Edge<CableEdgeData>[]>(
     () =>
-      project.cables.map((cable) => ({
-        id: cable.id,
-        type: "cable",
-        source: cable.source,
-        target: isDanglingCable(cable) ? `loose:${cable.id}` : cable.target,
-        sourceHandle: cable.sourceHandle,
-        targetHandle: isDanglingCable(cable) ? "t-loose" : cable.targetHandle,
-        reconnectable: false,
-        data: {
-          type: cable.type,
-          label: cable.label,
-          color: cable.color,
-          waypoints: cable.waypoints,
-        },
-      })),
-    [project.cables],
+      project.cables.map((cable) => {
+        const selected = selection?.kind === "cable" && selection.id === cable.id;
+        return {
+          id: cable.id,
+          type: "cable",
+          source: cable.source,
+          target: isDanglingCable(cable) ? `loose:${cable.id}` : cable.target,
+          sourceHandle: cable.sourceHandle,
+          targetHandle: isDanglingCable(cable) ? "t-loose" : cable.targetHandle,
+          reconnectable: false,
+          selected,
+          zIndex: selected ? 8 : 0,
+          data: {
+            type: cable.type,
+            label: cable.label,
+            color: cable.color,
+            waypoints: cable.waypoints,
+          },
+        };
+      }),
+    [project.cables, selection],
   );
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
