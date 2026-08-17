@@ -1,5 +1,6 @@
-export const PROJECT_VERSION = 2 as const;
+export const PROJECT_VERSION = 3 as const;
 export const LEGACY_PROJECT_VERSION = 1 as const;
+export const SUPPORTED_PROJECT_VERSIONS = [1, 2, 3] as const;
 
 export type CableTypeId = "14/2" | "14/3" | "12/2" | "12/3" | "10/2" | "10/3";
 
@@ -71,6 +72,8 @@ export type Cable = {
   label: string;
   color: WireColorId;
   waypoints: Point[];
+  looseEnd?: Point;
+  lockLandings?: boolean;
 };
 
 export type Note = {

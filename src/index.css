@@ -32,9 +32,20 @@ body {
   opacity: 0.45;
 }
 
+.location-node .side-strip {
+  opacity: 0;
+  background: #38bdf8;
+  border: 0;
+}
+
 .location-node.connect-ready .react-flow__handle,
 .location-node:hover .react-flow__handle {
   opacity: 1;
+}
+
+.location-node.connect-ready .side-strip,
+.location-node:hover .side-strip {
+  opacity: 0.35;
 }
 
 [data-export-theme="light"] .react-flow {

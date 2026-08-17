@@ -8,7 +8,7 @@ This file is the source of truth for this branch. Open questions are called out 
 
 The left palette has four **Locations** (Panel, Box, Fixture, Note) and a **Cables** strip you click, then connect node-to-node.
 
-On the canvas, Panel / Box / Off-drawing show a one-line header inside the body (box code, then name; no kind badge). Boxes keep a 2×N device area under that strip. Cables are typed edges with 90° routes, end labels (`A1` / `To B2`), and colors.
+On the canvas, Panel / Box / Off-drawing show a one-line header inside the body (box code, then name; no kind badge). Boxes keep a 2×N device area under that strip. Cables auto-route with rounded 90° bends, one-line end labels, and type+note text along the run.
 
 ## Palette direction
 
@@ -67,6 +67,10 @@ Click-to-arm, then connect, is easy to miss and is not how the locations work. M
 
 The old “click the type, then click two boxes” path can stay as a fallback.
 
+Auto-route (empty waypoints) takes the shortest orthogonal path with the fewest bends, rounded corners, and a clearance around other boxes. Multiple runs between the same boxes travel in parallel. Landings can sit anywhere on a box edge (the old 3-per-side dots were making routes zigzag). Hover a run to drag a bend; drag a landing along the border; drop a run on empty canvas for a one-ended (loose) wire.
+
+On-wire text is `12/2` plus the inspector Note, repeated with space between. End labels are one line (`A2 to H2`) and sit beside the path.
+
 ## Off-drawing location
 
 A box on *this* drawing that really lives on another page. Use it when a run leaves the sheet.
@@ -78,13 +82,14 @@ This pass:
 
 ## Data model (so old drawings still open)
 
-Bump saved JSON from version **1** to **2**. `parseProject` still reads v1 and fills in the new fields.
+Bump saved JSON from version **1** to **3**. `parseProject` still reads v1 and v2 and fills in the new fields.
 
 - `fixture` locations become **1-gang boxes** with a light in the slot.
 - The old single `device` field becomes **slots** (one per gang). `none` / `duplex-outlet` / `gfci-outlet` map to `empty` / `duplex-15` / `gfci-15`.
 - New boxes default to **empty slots** (junction until you drop a device).
 - Panels get a list of numbered **breaker spaces** (default **12**, two columns, US-style odd left / even right). Connecting to a space uses that breaker number as the port.
 - Off-drawing is a new `kind`.
+- Cables may have an empty `target` and a `looseEnd` point (one-ended run).
 
 ## Implementation plan
 
@@ -130,5 +135,6 @@ Answer these whenever. I will keep moving on the defaults above.
 - [x] Cable drag, snap, and reconnect
 - [x] README / PLAN / MILESTONES pointers
 - [x] In-box header: code + name, no kind badge
+- [x] Cable routing: rounded 90° auto-route, on-wire notes, loose ends
 
 Started on `feat/milestone-1-tweaks`. Existing milestone 1 drawings should keep opening after the version bump.

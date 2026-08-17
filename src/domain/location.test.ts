@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sideFromHandle } from "./ortho";
+import { sideFromHandle } from "./handles";
 import { migrateLegacyDevice, migrateLegacyKind } from "./location";
 import { boxSize, nearestLocation } from "./layout";
 import { emptySlots, defaultBreakers } from "./location";

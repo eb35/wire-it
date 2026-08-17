@@ -1,5 +1,6 @@
-import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
+import { Handle, Position, useReactFlow, type Node, type NodeProps } from "@xyflow/react";
 import type { CSSProperties, DragEvent, MouseEvent } from "react";
+import { handleStyle, landingsForLocation } from "../../domain/handles";
 import {
   BOX_HEADER,
   EXTERNAL_SIZE,
@@ -9,7 +10,7 @@ import {
   boxSize,
 } from "../../domain/layout";
 import { PALETTE_MIME, parsePalette } from "../../domain/palette";
-import type { BreakerSlot, DeviceSlot, LocationKind } from "../../domain/types";
+import type { BreakerSlot, DeviceSlot, LocationKind, Side } from "../../domain/types";
 import { useDiagramStore } from "../../store/useDiagramStore";
 import { DeviceGlyph } from "./DeviceGlyph";
 
@@ -24,44 +25,106 @@ export type LocationNodeData = {
   externalRef: string;
 };
 
-function offset(position: Position, index: number): CSSProperties {
-  const t = `${28 + index * 22}%`;
-  if (position === Position.Top || position === Position.Bottom) {
-    return { left: t };
+const SIDE_POSITION: Record<Side, Position> = {
+  top: Position.Top,
+  right: Position.Right,
+  bottom: Position.Bottom,
+  left: Position.Left,
+};
+
+const STRIP_SIDES: Side[] = ["top", "right", "bottom", "left"];
+
+function stripStyle(side: Side): CSSProperties {
+  if (side === "top" || side === "bottom") {
+    return { left: "50%", width: "78%", height: 10, borderRadius: 8 };
   }
-  return { top: t };
+  return { top: "50%", height: "78%", width: 10, borderRadius: 8 };
 }
 
-function SideHandles({ position, side }: { position: Position; side: "t" | "r" | "b" | "l" }) {
+function knobStyle(side: Side, t: number): CSSProperties {
+  const pct = `${Math.round(t * 100)}%`;
+  if (side === "top") return { left: pct, top: 0 };
+  if (side === "bottom") return { left: pct, top: "100%" };
+  if (side === "left") return { left: 0, top: pct };
+  return { left: "100%", top: pct };
+}
+
+function LandingSlide({
+  cableId,
+  end,
+  side,
+  t,
+}: {
+  cableId: string;
+  end: "source" | "target";
+  side: Side;
+  t: number;
+}) {
+  const slideLanding = useDiagramStore((state) => state.slideLanding);
+  const { screenToFlowPosition } = useReactFlow();
   return (
-    <>
-      {[0, 1, 2].map((index) => (
-        <span key={`${side}${index}`}>
-          <Handle
-            type="source"
-            id={`s-${side}${index}`}
-            position={position}
-            style={offset(position, index)}
-          />
-          <Handle
-            type="target"
-            id={`t-${side}${index}`}
-            position={position}
-            style={offset(position, index)}
-          />
-        </span>
-      ))}
-    </>
+    <div
+      className="landing-slide nopan nodrag pointer-events-auto absolute z-20 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border border-zinc-200 bg-zinc-500"
+      style={knobStyle(side, t)}
+      onPointerDown={(event) => {
+        event.stopPropagation();
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }}
+      onPointerMove={(event) => {
+        if (event.buttons !== 1) return;
+        event.stopPropagation();
+        slideLanding(cableId, end, screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+      }}
+      title="Drag along the box edge to move this landing"
+    />
   );
 }
 
-function BoxHandles() {
+function BoxHandles({ id }: { id: string }) {
+  const cables = useDiagramStore((state) => state.project.cables);
+  const landings = landingsForLocation(id, cables);
   return (
     <>
-      <SideHandles position={Position.Top} side="t" />
-      <SideHandles position={Position.Right} side="r" />
-      <SideHandles position={Position.Bottom} side="b" />
-      <SideHandles position={Position.Left} side="l" />
+      {STRIP_SIDES.map((side) => (
+        <span key={side}>
+          <Handle
+            className="side-strip"
+            type="source"
+            id={`s-${side[0]}`}
+            position={SIDE_POSITION[side]}
+            style={stripStyle(side)}
+          />
+          <Handle
+            className="side-strip"
+            type="target"
+            id={`t-${side[0]}`}
+            position={SIDE_POSITION[side]}
+            style={stripStyle(side)}
+          />
+        </span>
+      ))}
+      {landings.map((landing) => {
+        const placed = handleStyle(landing.side, landing.t);
+        const cableId =
+          cables.find((cable) =>
+            landing.role === "source"
+              ? cable.source === id && cable.sourceHandle === landing.handleId
+              : cable.target === id && cable.targetHandle === landing.handleId,
+          )?.id ?? "";
+        return (
+          <span key={`${landing.handleId}-${landing.role}`}>
+            <Handle
+              type={landing.role}
+              id={landing.handleId}
+              position={SIDE_POSITION[placed.position]}
+              style={placed.style}
+            />
+            {cableId ? (
+              <LandingSlide cableId={cableId} end={landing.role} side={landing.side} t={landing.t} />
+            ) : null}
+          </span>
+        );
+      })}
     </>
   );
 }
@@ -217,7 +280,7 @@ export function LocationNode({ id, data, selected }: NodeProps<Node<LocationNode
   const chrome = useLocationChrome(id);
 
   const frame = [
-    "location-node group text-left shadow-none",
+    "location-node group relative text-left shadow-none",
     selected ? "ring-2 ring-sky-400" : "",
     chrome.pending ? "ring-2 ring-sky-400" : "",
     chrome.connectType ? "connect-ready" : "",
@@ -242,13 +305,13 @@ export function LocationNode({ id, data, selected }: NodeProps<Node<LocationNode
     const ref = data.externalRef.trim() || "Other drawing";
     return (
       <div
-        className={`${frame} overflow-hidden rounded-sm border-2 border-dashed border-amber-600/80 bg-zinc-900/50`}
+        className={`${frame} rounded-sm border-2 border-dashed border-amber-600/80 bg-zinc-900/50`}
         style={{ width: EXTERNAL_SIZE.width, height: EXTERNAL_SIZE.height }}
         onClick={chrome.onClick}
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => chrome.onDeviceDrop(event)}
       >
-        <BoxHandles />
+        <BoxHandles id={id} />
         <LocationCaption code={data.code} label={data.label} />
         <div className="truncate px-1.5 pt-1 text-[10px] leading-tight text-zinc-400" title={ref}>
           {ref}
@@ -260,7 +323,7 @@ export function LocationNode({ id, data, selected }: NodeProps<Node<LocationNode
   const size = boxSize(data.capacity);
   return (
     <div className={frame} onClick={chrome.onClick} style={{ width: size.width }}>
-      <BoxHandles />
+      <BoxHandles id={id} />
       <BoxBody
         capacity={data.capacity}
         slots={data.slots}

@@ -36,3 +36,28 @@ export function wireEndCopy(
     subtitle: `To ${wireTag(otherCode, otherPort)}`,
   };
 }
+
+export function wireEndParts(
+  localCode: string,
+  localPort: string,
+  otherCode?: string,
+  otherPort?: string,
+): { local: string; rest: string } {
+  const local = wireTag(localCode, localPort);
+  if (!otherCode) return { local, rest: "loose" };
+  return { local, rest: `to ${wireTag(otherCode, otherPort ?? "")}` };
+}
+
+export function wireEndLine(
+  localCode: string,
+  localPort: string,
+  otherCode?: string,
+  otherPort?: string,
+): string {
+  const parts = wireEndParts(localCode, localPort, otherCode, otherPort);
+  return `${parts.local} ${parts.rest}`;
+}
+
+export function isDanglingCable(cable: { target: string }): boolean {
+  return !cable.target;
+}

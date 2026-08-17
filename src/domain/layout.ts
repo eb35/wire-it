@@ -7,6 +7,14 @@ export const PANEL_HEADER = BOX_HEADER;
 export const PANEL_ROW = 34;
 export const EXTERNAL_SIZE = { width: 148, height: 56 };
 export const CABLE_SNAP_DISTANCE = 88;
+export const GRID_SIZE = 20;
+
+export function snapToGrid(point: Point, size = GRID_SIZE): Point {
+  return {
+    x: Math.round(point.x / size) * size,
+    y: Math.round(point.y / size) * size,
+  };
+}
 
 export function boxBodySize(capacity: BoxCapacity): { width: number; height: number } {
   return { width: GANG_UNIT * capacity, height: GANG_UNIT * 2 };

@@ -8,6 +8,7 @@ export * from "./ortho";
 export * from "./palette";
 export * from "./ports";
 export * from "./project";
+export * from "./route";
 export * from "./sample";
 export * from "./types";
 export * from "./waypoints";

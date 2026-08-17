@@ -5,7 +5,7 @@ import {
   WIRE_COLOR_IDS,
   WIRE_COLORS,
   resolveCableColor,
-  wireEndCopy,
+  wireEndLine,
 } from "../domain";
 import type { BoxCapacity, DeviceType } from "../domain/types";
 import { useDiagramStore } from "../store/useDiagramStore";
@@ -44,8 +44,8 @@ export function Inspector() {
         <div className="flex flex-col gap-2">
           <h2 className="text-sm font-semibold">Inspector</h2>
           <p className="text-xs text-zinc-500">
-            Select a box, cable, or note. Drag a device onto a box. Select a cable and drag an
-            end to another box to move it. Pressure points stay at 90 degrees.
+            Select a box, cable, or note. Drag a device onto a box. Hover a cable to bend it.
+            Drag a landing along a box edge, or drop a run on empty canvas for a loose end.
           </p>
         </div>
       ) : null}
@@ -162,16 +162,18 @@ export function Inspector() {
         </div>
       ) : null}
 
-      {cable && cableSource && cableTarget ? (
+      {cable && cableSource ? (
         <div className="flex flex-col gap-3">
           <h2 className="text-sm font-semibold">{cable.type} run</h2>
           <p className="font-mono text-xs text-zinc-300">
-            {wireEndCopy(cableSource.code, cable.sourcePort, cableTarget.code, cable.targetPort).title}
-            <span className="text-zinc-500"> → </span>
-            {wireEndCopy(cableTarget.code, cable.targetPort, cableSource.code, cable.sourcePort).title}
+            {cableTarget
+              ? wireEndLine(cableSource.code, cable.sourcePort, cableTarget.code, cable.targetPort)
+              : wireEndLine(cableSource.code, cable.sourcePort)}
           </p>
           <p className="text-xs text-zinc-500">
-            Drag either end of this run onto another box to move it.
+            {cableTarget
+              ? "Click a run to select it — blue dots appear so you can bend it or move an end. Drag a bend back to straight, or double-click / Delete it, to remove it."
+              : "Loose end — drag the free end onto a box when you know where it lands."}
           </p>
           <label className="flex flex-col gap-1 text-xs text-zinc-500">
             Type
@@ -197,18 +199,19 @@ export function Inspector() {
               onChange={(event) => updateCable(cable.id, { sourcePort: event.target.value })}
             />
           </label>
-          <label className="flex flex-col gap-1 text-xs text-zinc-500">
-            At {cableTarget.label} ({cableTarget.code}) this end is
-            <input
-              className="w-16 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 font-mono text-sm text-zinc-100"
-              value={cable.targetPort}
-              onChange={(event) => updateCable(cable.id, { targetPort: event.target.value })}
-            />
-          </label>
+          {cableTarget ? (
+            <label className="flex flex-col gap-1 text-xs text-zinc-500">
+              At {cableTarget.label} ({cableTarget.code}) this end is
+              <input
+                className="w-16 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 font-mono text-sm text-zinc-100"
+                value={cable.targetPort}
+                onChange={(event) => updateCable(cable.id, { targetPort: event.target.value })}
+              />
+            </label>
+          ) : null}
           <p className="text-xs text-zinc-500">
-            {cableSource.code}
-            {cable.sourcePort} shows “To {cableTarget.code}
-            {cable.targetPort}”. The other end is the reverse.
+            End labels follow the run as a single line. The type and this note repeat along the
+            wire.
           </p>
           <label className="flex flex-col gap-1 text-xs text-zinc-500">
             Note
