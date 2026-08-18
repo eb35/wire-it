@@ -34,12 +34,27 @@ import type {
   WireColorId,
 } from "../domain/types";
 import {
+  deleteRemoteDrawing,
+  fetchDrawing,
+  listDrawings,
+  putDrawing,
+  type GetToken,
+} from "../persist/cloud";
+import {
   createBlankDrawing,
+  listCachedProjects,
   loadWorkspace,
   readDrawing,
   removeDrawing,
   saveWorkspace,
 } from "../persist/storage";
+
+export type SaveStatus = "local" | "saving" | "saved" | "error" | "offline";
+
+export type CloudAuth = {
+  userId: string;
+  getToken: GetToken;
+};
 
 export type Selection =
   | { kind: "location"; id: string }
@@ -63,10 +78,16 @@ type DiagramState = {
   connectType: CableTypeId | null;
   connectFrom: string | null;
   draggingCableEnd: { cableId: string; end: "source" | "target" } | null;
+  saveStatus: SaveStatus;
+  pendingMigration: number | null;
   setProjectName: (name: string) => void;
   newDrawing: () => void;
   switchDrawing: (id: string) => void;
   deleteDrawing: (id: string) => void;
+  connectCloud: (auth: CloudAuth) => Promise<void>;
+  disconnectCloud: () => void;
+  acceptMigration: () => Promise<void>;
+  skipMigration: () => Promise<void>;
   addLocation: (
     input: { kind: LocationKind; capacity?: BoxCapacity },
     position: Point,
@@ -182,10 +203,50 @@ function applyLocationPatch(item: Location, patch: LocationPatch): Location {
 
 const loaded = loadWorkspace();
 
+let cloud: CloudAuth | null = null;
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingProject: Project | null = null;
+
 function persist(library: Library, project: Project): { library: Library; project: Project } {
   saveWorkspace(library, project);
-  const nextLibrary = JSON.parse(localStorage.getItem("wire-it:library") ?? "null") as Library;
+  const stored = localStorage.getItem("wire-it:library");
+  const nextLibrary = stored ? (JSON.parse(stored) as Library) : library;
+  if (cloud) scheduleCloudSave(project);
   return { library: nextLibrary, project };
+}
+
+function scheduleCloudSave(project: Project): void {
+  pendingProject = project;
+  useDiagramStore.setState({ saveStatus: "saving" });
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    void flushCloudSave();
+  }, 1000);
+}
+
+async function flushCloudSave(): Promise<void> {
+  const session = cloud;
+  const project = pendingProject;
+  if (!session || !project) return;
+  pendingProject = null;
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  try {
+    const meta = await putDrawing(session.getToken, project);
+    useDiagramStore.setState((state) => ({
+      saveStatus: "saved",
+      library: {
+        ...state.library,
+        drawings: state.library.drawings.map((item) =>
+          item.id === meta.id ? meta : item,
+        ),
+      },
+    }));
+  } catch {
+    useDiagramStore.setState({ saveStatus: "error" });
+  }
 }
 
 export const useDiagramStore = create<DiagramState>((set, get) => ({
@@ -195,6 +256,8 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
   connectType: null,
   connectFrom: null,
   draggingCableEnd: null,
+  saveStatus: "local",
+  pendingMigration: null,
 
   setProjectName: (name) => {
     const { library, project } = get();
@@ -216,21 +279,36 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
   switchDrawing: (id) => {
     const { library, project } = get();
     saveWorkspace(library, project);
-    const next = readDrawing(id);
-    if (!next) return;
-    set({
-      library: { ...library, activeId: id },
-      project: next,
-      selection: null,
-      connectType: null,
-      connectFrom: null,
+    pendingProject = project;
+    void flushCloudSave();
+    const apply = (next: Project) => {
+      const nextLibrary = { ...library, activeId: id };
+      saveWorkspace(nextLibrary, next);
+      set({
+        library: nextLibrary,
+        project: next,
+        selection: null,
+        connectType: null,
+        connectFrom: null,
+      });
+    };
+    const cached = readDrawing(id);
+    if (cached) {
+      apply(cached);
+      return;
+    }
+    if (!cloud) return;
+    void fetchDrawing(cloud.getToken, id).then((next) => {
+      if (next) apply(next);
     });
-    saveWorkspace({ ...library, activeId: id }, next);
   },
 
   deleteDrawing: (id) => {
     const { library, project } = get();
     removeDrawing(id);
+    if (cloud) {
+      void deleteRemoteDrawing(cloud.getToken, id);
+    }
     const remaining = library.drawings.filter((item) => item.id !== id);
     if (remaining.length === 0) {
       const blank = createBlankDrawing();
@@ -242,7 +320,18 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
     }
     const nextActive = library.activeId === id ? remaining[0]!.id : library.activeId;
     const nextProject = nextActive === project.id ? project : readDrawing(nextActive);
-    if (!nextProject) return;
+    if (!nextProject) {
+      if (!cloud) return;
+      void fetchDrawing(cloud.getToken, nextActive).then((fetched) => {
+        if (!fetched) return;
+        const nextLibrary = { activeId: nextActive, drawings: remaining };
+        set({
+          ...persist(nextLibrary, fetched),
+          selection: null,
+        });
+      });
+      return;
+    }
     const nextLibrary = { activeId: nextActive, drawings: remaining };
     set({
       ...persist(nextLibrary, nextProject),
@@ -810,6 +899,96 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
       selection: null,
       connectType: null,
       connectFrom: null,
+    });
+  },
+
+  connectCloud: async (auth) => {
+    cloud = auth;
+    try {
+      const remote = await listDrawings(auth.getToken);
+      const local = listCachedProjects();
+      if (remote.length === 0 && local.length > 0) {
+        set({ saveStatus: "saved", pendingMigration: local.length });
+        return;
+      }
+      if (remote.length === 0) {
+        const { library, project } = get();
+        set({ ...persist(library, project), saveStatus: "saving", pendingMigration: null });
+        return;
+      }
+      const activeId = remote[0]!.id;
+      const project = (await fetchDrawing(auth.getToken, activeId)) ?? readDrawing(activeId);
+      if (!project) {
+        set({ saveStatus: "error" });
+        return;
+      }
+      const library = { activeId, drawings: remote };
+      saveWorkspace(library, project);
+      set({
+        library,
+        project,
+        selection: null,
+        connectType: null,
+        connectFrom: null,
+        saveStatus: "saved",
+        pendingMigration: null,
+      });
+    } catch {
+      set({ saveStatus: "offline" });
+    }
+  },
+
+  disconnectCloud: () => {
+    cloud = null;
+    pendingProject = null;
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    set({ saveStatus: "local", pendingMigration: null });
+  },
+
+  acceptMigration: async () => {
+    const session = cloud;
+    if (!session) return;
+    try {
+      const local = listCachedProjects();
+      for (const project of local) {
+        await putDrawing(session.getToken, project);
+      }
+      const remote = await listDrawings(session.getToken);
+      const activeId = remote[0]?.id ?? local[0]?.id;
+      if (!activeId) {
+        set({ pendingMigration: null, saveStatus: "saved" });
+        return;
+      }
+      const project =
+        (await fetchDrawing(session.getToken, activeId)) ??
+        local.find((item) => item.id === activeId) ??
+        local[0]!;
+      const library = { activeId: project.id, drawings: remote.length ? remote : local.map((item) => ({
+        id: item.id,
+        name: item.name,
+        updatedAt: new Date().toISOString(),
+      })) };
+      saveWorkspace(library, project);
+      set({
+        library,
+        project,
+        selection: null,
+        pendingMigration: null,
+        saveStatus: "saved",
+      });
+    } catch {
+      set({ saveStatus: "error" });
+    }
+  },
+
+  skipMigration: async () => {
+    const blank = createBlankDrawing();
+    set({
+      ...persist({ activeId: blank.id, drawings: [] }, blank),
+      pendingMigration: null,
     });
   },
 }));
