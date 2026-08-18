@@ -1,7 +1,10 @@
+import { UserButton } from "@clerk/clerk-react";
 import { useRef, useState } from "react";
-import { downloadJson, parseProject } from "../domain/project";
+import { parseProject } from "../domain/project";
+import { clerkEnabled } from "../lib/clerk";
+import { downloadJson } from "../lib/downloadJson";
 import { exportFlowPng, type ExportTheme } from "../lib/exportPng";
-import { useDiagramStore } from "../store/useDiagramStore";
+import { useDiagramStore, type SaveStatus } from "../store/useDiagramStore";
 
 export function Toolbar() {
   const library = useDiagramStore((state) => state.library);
@@ -11,6 +14,7 @@ export function Toolbar() {
   const switchDrawing = useDiagramStore((state) => state.switchDrawing);
   const deleteDrawing = useDiagramStore((state) => state.deleteDrawing);
   const importProject = useDiagramStore((state) => state.importProject);
+  const saveStatus = useDiagramStore((state) => state.saveStatus);
   const fileRef = useRef<HTMLInputElement>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -132,9 +136,20 @@ export function Toolbar() {
         }}
       />
       {error ? <span className="text-xs text-red-400">{error}</span> : null}
-      <p className="ml-auto hidden text-[11px] text-zinc-600 md:block">
-        Documentation only — not a wiring or code guide.
-      </p>
+      <p className="ml-auto hidden text-[11px] text-zinc-500 md:block">{saveLabel(saveStatus)}</p>
+      {clerkEnabled ? (
+        <div className="ml-2 flex items-center">
+          <UserButton />
+        </div>
+      ) : null}
     </header>
   );
+}
+
+function saveLabel(status: SaveStatus): string {
+  if (status === "saving") return "Saving…";
+  if (status === "saved") return "Saved to your account";
+  if (status === "error") return "Couldn’t save to the cloud";
+  if (status === "offline") return "Offline — this browser only";
+  return "This browser only";
 }

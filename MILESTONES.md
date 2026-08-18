@@ -1,6 +1,8 @@
 # Wire-it milestones
 
-A local-first web app for documenting real household NM (Romex) runs: labeled boxes, typed cables, notes, and later the splices inside each box. This is a documentation tool, not a circuit simulator or code checker.
+A web app for documenting real household NM (Romex) runs: labeled boxes, typed cables, notes, and later the splices inside each box. This is a documentation tool, not a circuit simulator or code checker.
+
+Hosted at **wire.therobhenry.com**, invite-only, behind Clerk.
 
 ## Milestone 1 — Floor-plan cable map (done)
 
@@ -18,13 +20,25 @@ A working dark-mode React app you can run locally.
 - Export / import JSON; export PNG with a **light or dark** background
 - Sample drawing on first load
 
-Out of scope here: box internals, accounts, a full light-mode UI, and custom colors for every object.
+## Milestone 1 tweaks — done enough to host
 
-## Milestone 1 tweaks — in progress
+Reshape the palette and the things you drop on the board: panel that looks like a panel, gang-sized boxes, devices that go *into* boxes, draggable / reattachable cables, and an off-drawing stub. Details are in [MILESTONE-1-TWEAKS.md](./MILESTONE-1-TWEAKS.md). Leftover routing and look polish rides with editor reliability.
 
-Reshape the palette and the things you drop on the board: panel that looks like a panel, gang-sized boxes, devices that go *into* boxes, draggable / reattachable cables, and an off-drawing stub. Details and open questions are in [MILESTONE-1-TWEAKS.md](./MILESTONE-1-TWEAKS.md).
+## Milestone 2 — Host and accounts (in progress)
 
-## Milestone 2 — Box internals
+Lock the app behind login and stop storing the only copy of a drawing in the browser.
+
+- Cloudflare Worker + static SPA at `wire.therobhenry.com`
+- Clerk **email/password**, **invite-only** (public sign-up off)
+- Many named drawings per user, saved in Cloudflare D1, keyed by Clerk `userId`
+- Debounced cloud autosave; `localStorage` is a cache, not the source of truth
+- First login can upload drawings already in this browser
+- Milestone 1 export/import stays as the backup and share path
+- Safer local load: never replace an existing library with the sample kitchen
+
+Out of scope here: OAuth, box internals, sharing links.
+
+## Milestone 3 — Box internals
 
 Double-click a box to zoom into how individual conductors land.
 
@@ -33,39 +47,42 @@ Double-click a box to zoom into how individual conductors land.
 - 3-way / 4-way travelers as first-class connections
 - Data stays attached to `{ cableId, conductor }` from the floor-plan graph
 
-## Milestone 3 — Drawings and accounts
+## Milestone 4 — Editor reliability
 
-- Many named drawings per user, saved under an account
-- More than one person can keep their own library
-- Milestone 1 export/import stays as the backup and share path
+- Remaining cable attach, landing, and route bugs
+- Comprehensive undo/redo history
 
-## Milestone 4 — Light / dark mode
+## Milestone 5 — OAuth
 
-- App-wide light and dark themes (milestone 1 ships **dark only**)
-- PNG / image export already offers light or dark in milestone 1; the in-app chrome gets the same choice here
+- Clerk social providers (Google and similar)
+- Same Clerk `userId`; no drawing migration
 
-## Milestone 5 — Custom colors and appearance
+## Milestone 6 — Light / dark mode
+
+- App-wide light and dark themes (the editor still ships **dark only**)
+- PNG / image export already offers light or dark; the in-app chrome gets the same choice here
+
+## Milestone 7 — Custom colors and appearance
 
 - User-chosen colors for wires (beyond the starter palette), boxes, notes, and more
 - Discuss tokens, presets, and print contrast before building
 
-## Milestone 6 — Richer devices
+## Milestone 8 — Richer devices
 
 - Dimmer, fan, multi-gang boxes (two or more devices in one box)
 - More fixture types as needed
 
-## Milestone 7 — House context
+## Milestone 9 — House context
 
 - Optional floor-plan / photo underlay
 - Rooms, multiple pages or circuits in one drawing
 
-## Milestone 8 — Share and deploy
+## Milestone 10 — Share and print
 
-- Hosted static site
 - Optional “open this JSON” link
 - Print-friendly view
 
-## Milestone 9 — More tldraw-like markup
+## Milestone 11 — More tldraw-like markup
 
 - Freehand pen, arrows that are not cables, highlighter
 - Only if notes are not enough

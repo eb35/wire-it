@@ -283,16 +283,6 @@ function attachPanelCables(
   return { locations: nextLocations, cables: nextCables };
 }
 
-export function downloadJson(project: Project): void {
-  const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `${slug(project.name)}.json`;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
 export function slug(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "drawing";
 }

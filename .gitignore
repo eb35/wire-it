@@ -4,3 +4,8 @@ dist
 .DS_Store
 tsconfig.tsbuildinfo
 src/**/*.tsbuildinfo
+.env
+.env.production
+.dev.vars
+.wrangler
+.cursor

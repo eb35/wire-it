@@ -1,17 +1,25 @@
-import { DiagramCanvas } from "./components/DiagramCanvas";
-import { Inspector } from "./components/Inspector";
-import { Palette } from "./components/Palette";
-import { Toolbar } from "./components/Toolbar";
+import { SignedIn, SignedOut } from "@clerk/clerk-react";
+import { clerkEnabled } from "./lib/clerk";
+import { CloudSession } from "./components/CloudSession";
+import { Editor } from "./components/Editor";
+import { SignInScreen } from "./components/SignInScreen";
 
 export function App() {
+  if (!clerkEnabled) {
+    return <Editor />;
+  }
+
   return (
-    <div className="flex h-screen flex-col bg-zinc-950 text-zinc-100">
-      <Toolbar />
-      <div className="flex min-h-0 flex-1">
-        <Palette />
-        <DiagramCanvas />
-        <Inspector />
-      </div>
-    </div>
+    <>
+      <SignedOut>
+        <SignInScreen />
+      </SignedOut>
+      <SignedIn>
+        <div className="relative">
+          <Editor />
+          <CloudSession />
+        </div>
+      </SignedIn>
+    </>
   );
 }
