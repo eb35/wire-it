@@ -10,5 +10,7 @@ export * from "./ports";
 export * from "./project";
 export * from "./route";
 export * from "./sample";
+export * from "./splices";
+export * from "./terminals";
 export * from "./types";
 export * from "./waypoints";

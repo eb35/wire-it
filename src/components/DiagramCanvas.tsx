@@ -201,6 +201,7 @@ function DiagramCanvasInner() {
         edges={edges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
+        zoomOnDoubleClick={false}
         onNodesChange={onNodesChange}
         onNodeDragStop={(_event, node) => moveNode(node.id, node.position)}
         onNodeClick={(_event, node) => {

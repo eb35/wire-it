@@ -21,11 +21,19 @@ import {
   projectToPerimeter,
   snapToGrid,
 } from "../domain";
+import {
+  addNutAndLand as applyNewNut,
+  landConductor as applyLanding,
+  pruneInternals,
+} from "../domain/splices";
+import { PROJECT_VERSION } from "../domain/types";
 import type {
   BoxCapacity,
   Cable,
   CableTypeId,
+  ConductorColor,
   DeviceType,
+  LandingTarget,
   Library,
   Location,
   LocationKind,
@@ -80,6 +88,7 @@ type DiagramState = {
   draggingCableEnd: { cableId: string; end: "source" | "target" } | null;
   saveStatus: SaveStatus;
   pendingMigration: number | null;
+  openBoxId: string | null;
   setProjectName: (name: string) => void;
   newDrawing: () => void;
   switchDrawing: (id: string) => void;
@@ -139,6 +148,15 @@ type DiagramState = {
   setSelection: (selection: Selection | null) => void;
   deleteSelection: () => void;
   importProject: (project: Project) => void;
+  openBox: (id: string) => void;
+  closeBox: () => void;
+  landConductor: (
+    locationId: string,
+    cableId: string,
+    conductor: ConductorColor,
+    target: LandingTarget | null,
+  ) => void;
+  addNutAndLand: (locationId: string, cableId: string, conductor: ConductorColor) => void;
 };
 
 function makeCable(
@@ -208,11 +226,12 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingProject: Project | null = null;
 
 function persist(library: Library, project: Project): { library: Library; project: Project } {
-  saveWorkspace(library, project);
+  const next = pruneInternals({ ...project, version: PROJECT_VERSION });
+  saveWorkspace(library, next);
   const stored = localStorage.getItem("wire-it:library");
   const nextLibrary = stored ? (JSON.parse(stored) as Library) : library;
-  if (cloud) scheduleCloudSave(project);
-  return { library: nextLibrary, project };
+  if (cloud) scheduleCloudSave(next);
+  return { library: nextLibrary, project: next };
 }
 
 function scheduleCloudSave(project: Project): void {
@@ -258,6 +277,7 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
   draggingCableEnd: null,
   saveStatus: "local",
   pendingMigration: null,
+  openBoxId: null,
 
   setProjectName: (name) => {
     const { library, project } = get();
@@ -273,6 +293,7 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
       selection: null,
       connectType: null,
       connectFrom: null,
+      openBoxId: null,
     });
   },
 
@@ -290,6 +311,7 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
         selection: null,
         connectType: null,
         connectFrom: null,
+        openBoxId: null,
       });
     };
     const cached = readDrawing(id);
@@ -315,6 +337,7 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
       set({
         ...persist({ activeId: blank.id, drawings: [] }, blank),
         selection: null,
+        openBoxId: null,
       });
       return;
     }
@@ -328,6 +351,7 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
         set({
           ...persist(nextLibrary, fetched),
           selection: null,
+          openBoxId: null,
         });
       });
       return;
@@ -336,6 +360,7 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
     set({
       ...persist(nextLibrary, nextProject),
       selection: null,
+      openBoxId: null,
     });
   },
 
@@ -476,7 +501,7 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
   },
 
   deleteLocation: (id) => {
-    const { library, project, selection } = get();
+    const { library, project, selection, openBoxId } = get();
     set({
       ...persist(library, {
         ...project,
@@ -484,6 +509,7 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
         cables: project.cables.filter((cable) => cable.source !== id && cable.target !== id),
       }),
       selection: selection?.kind === "location" && selection.id === id ? null : selection,
+      openBoxId: openBoxId === id ? null : openBoxId,
     });
   },
 
@@ -899,7 +925,26 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
       selection: null,
       connectType: null,
       connectFrom: null,
+      openBoxId: null,
     });
+  },
+
+  openBox: (id) => {
+    const location = get().project.locations.find((item) => item.id === id);
+    if (!location || (location.kind !== "box" && location.kind !== "external")) return;
+    set({ openBoxId: id, selection: { kind: "location", id } });
+  },
+
+  closeBox: () => set({ openBoxId: null }),
+
+  landConductor: (locationId, cableId, conductor, target) => {
+    const { library, project } = get();
+    set(persist(library, applyLanding(project, locationId, cableId, conductor, target)));
+  },
+
+  addNutAndLand: (locationId, cableId, conductor) => {
+    const { library, project } = get();
+    set(persist(library, applyNewNut(project, locationId, cableId, conductor)));
   },
 
   connectCloud: async (auth) => {
@@ -932,6 +977,7 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
         connectFrom: null,
         saveStatus: "saved",
         pendingMigration: null,
+        openBoxId: null,
       });
     } catch {
       set({ saveStatus: "offline" });
