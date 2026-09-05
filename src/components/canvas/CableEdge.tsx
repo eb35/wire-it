@@ -9,6 +9,7 @@ import {
   facingSide,
   insertBendOnSegment,
   isDanglingCable,
+  labelPlacement,
   locationRect,
   markOffsets,
   movePathSegment,
@@ -177,31 +178,6 @@ function EndLabel({
       <span className="font-normal text-zinc-300"> {rest}</span>
     </div>
   );
-}
-
-function labelPlacement(from: Point, toward: Point): { point: Point; angle: number } {
-  const dx = toward.x - from.x;
-  const dy = toward.y - from.y;
-  const length = Math.hypot(dx, dy) || 1;
-  const ux = dx / length;
-  const uy = dy / length;
-  let angle = (Math.atan2(dy, dx) * 180) / Math.PI;
-  let nx = -uy;
-  let ny = ux;
-  if (angle > 90 || angle < -90) {
-    angle += 180;
-    nx = -nx;
-    ny = -ny;
-  }
-  const along = Math.min(Math.max(LABEL_RUN * 0.45, 28), Math.max(20, length * 0.5));
-  const perp = 14;
-  return {
-    point: {
-      x: from.x + ux * along + nx * perp,
-      y: from.y + uy * along + ny * perp,
-    },
-    angle,
-  };
 }
 
 function snapDragEnd(
