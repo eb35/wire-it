@@ -332,6 +332,19 @@ export function cableLane(cables: Cable[], cable: Cable): number {
   return Math.max(0, index);
 }
 
+export function landingPoint(
+  location: Pick<Location, "position" | "kind" | "capacity" | "spaces">,
+  handleId: string,
+): Point {
+  const parsed = parseHandle(handleId);
+  const rect = locationRect(location);
+  const t =
+    parsed.breaker != null && location.kind === "panel"
+      ? breakerOffsetT(parsed.breaker, location.spaces)
+      : parsed.t;
+  return pointOnSide(rect, parsed.side, t);
+}
+
 export function landingsForLocation(locationId: string, cables: Cable[]): LocationLanding[] {
   const landings: LocationLanding[] = [];
   for (const cable of cables) {
