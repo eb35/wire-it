@@ -24,6 +24,7 @@ import type {
   Location,
   Note,
   Nut,
+  Pigtail,
   Point,
   Project,
   Splice,
@@ -61,6 +62,7 @@ export function emptyProject(name = "Untitled"): Project {
     notes: [],
     nuts: [],
     splices: [],
+    pigtails: [],
   };
 }
 
@@ -208,6 +210,7 @@ export function parseProject(raw: unknown): Project {
   const { locations: nextLocations, cables } = attachPanelCables(locations, rawCables);
   const nuts = parseNuts(raw.nuts);
   const splices = parseSplices(raw.splices);
+  const pigtails = parsePigtails(raw.pigtails);
 
   return pruneInternals({
     version: PROJECT_VERSION,
@@ -218,6 +221,7 @@ export function parseProject(raw: unknown): Project {
     notes,
     nuts,
     splices,
+    pigtails,
   });
 }
 
@@ -256,6 +260,32 @@ function parseLandingTarget(raw: unknown): LandingTarget | null {
 }
 
 const CONDUCTORS = new Set<ConductorColor>(["black", "white", "red", "bare"]);
+
+function parsePigtails(raw: unknown): Pigtail[] {
+  if (!Array.isArray(raw)) return [];
+  const pigtails: Pigtail[] = [];
+  for (const item of raw) {
+    if (
+      !isRecord(item) ||
+      typeof item.id !== "string" ||
+      typeof item.locationId !== "string" ||
+      typeof item.nutId !== "string" ||
+      !CONDUCTORS.has(item.conductor as ConductorColor)
+    ) {
+      continue;
+    }
+    const target = parseLandingTarget(item.target);
+    if (!target || target.kind !== "terminal") continue;
+    pigtails.push({
+      id: item.id,
+      locationId: item.locationId,
+      nutId: item.nutId,
+      conductor: item.conductor as ConductorColor,
+      target,
+    });
+  }
+  return pigtails;
+}
 
 function parseSplices(raw: unknown): Splice[] {
   if (!Array.isArray(raw)) return [];

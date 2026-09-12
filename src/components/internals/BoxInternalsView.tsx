@@ -76,8 +76,8 @@ export function BoxInternalsView() {
           {location.code} — {location.label}
         </h2>
         <span className="text-xs text-zinc-500">
-          Drag a tip onto a screw or a new nut. Drop on empty paper to disconnect. Occupied screws
-          free the previous wire.
+          Drag a tip onto a screw or nut. Click a landed tip or drop it on empty paper to
+          disconnect. Drag the spare tip on a nut to add a pigtail.
         </span>
         <div className="ml-auto flex gap-2">
           <button
@@ -100,7 +100,7 @@ export function BoxInternalsView() {
       <div className="min-h-0 flex-1 overflow-auto p-4">
         <div className="mx-auto max-w-5xl">
           <div className="overflow-hidden rounded-lg border border-zinc-700">
-            <InternalsCanvas project={project} location={location} interactive />
+            <InternalsCanvas project={project} location={location} interactive variant="editor" />
           </div>
           <div
             aria-hidden

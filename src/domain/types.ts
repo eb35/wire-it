@@ -99,6 +99,14 @@ export type Nut = {
   label: string;
 };
 
+export type Pigtail = {
+  id: string;
+  locationId: string;
+  nutId: string;
+  conductor: ConductorColor;
+  target: Extract<LandingTarget, { kind: "terminal" }>;
+};
+
 export type Project = {
   version: typeof PROJECT_VERSION;
   id: string;
@@ -108,6 +116,7 @@ export type Project = {
   notes: Note[];
   nuts: Nut[];
   splices: Splice[];
+  pigtails: Pigtail[];
 };
 
 export type DrawingMeta = {

@@ -2,6 +2,7 @@ export * from "./catalog";
 export * from "./exportSvg";
 export * from "./handles";
 export * from "./id";
+export * from "./internalsRoute";
 export * from "./label";
 export * from "./layout";
 export * from "./location";

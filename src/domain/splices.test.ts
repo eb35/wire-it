@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { emptyProject } from "./project";
-import { addNutAndLand, landConductor, pruneInternals, suggestNutLabel } from "./splices";
+import {
+  addNutAndLand,
+  addPigtail,
+  landConductor,
+  pruneInternals,
+  removePigtail,
+  suggestNutLabel,
+} from "./splices";
 import type { Location, Project } from "./types";
 
 function box(id: string, device: Location["slots"][0]["device"]): Location {
@@ -108,6 +115,72 @@ describe("landConductor", () => {
     const next = landConductor(withNut, "loc_b", "cab_1", "white", null);
     expect(next.splices).toEqual([]);
     expect(next.nuts).toEqual([]);
+  });
+});
+
+describe("pigtails", () => {
+  it("adds a lead from a nut onto a screw", () => {
+    const withNut = addNutAndLand(drawing(), "loc_b", "cab_1", "bare");
+    const nutId = withNut.nuts[0]!.id;
+    const next = addPigtail(withNut, "loc_b", nutId, "bare", {
+      kind: "terminal",
+      slotIndex: 0,
+      terminalId: "ground",
+    });
+    expect(next.pigtails).toEqual([
+      {
+        id: next.pigtails[0]!.id,
+        locationId: "loc_b",
+        nutId,
+        conductor: "bare",
+        target: { kind: "terminal", slotIndex: 0, terminalId: "ground" },
+      },
+    ]);
+  });
+
+  it("displaces a screw occupant when a pigtail lands", () => {
+    const landed = landConductor(drawing(), "loc_b", "cab_1", "bare", {
+      kind: "terminal",
+      slotIndex: 0,
+      terminalId: "ground",
+    });
+    const withNut = addNutAndLand(landed, "loc_b", "cab_2", "bare");
+    const next = addPigtail(withNut, "loc_b", withNut.nuts[0]!.id, "bare", {
+      kind: "terminal",
+      slotIndex: 0,
+      terminalId: "ground",
+    });
+    expect(next.splices.some((item) => item.cableId === "cab_1")).toBe(false);
+    expect(next.pigtails).toHaveLength(1);
+  });
+
+  it("drops a pigtail when a conductor takes its screw", () => {
+    const withNut = addNutAndLand(drawing(), "loc_b", "cab_1", "bare");
+    const withLead = addPigtail(withNut, "loc_b", withNut.nuts[0]!.id, "bare", {
+      kind: "terminal",
+      slotIndex: 0,
+      terminalId: "ground",
+    });
+    const next = landConductor(withLead, "loc_b", "cab_2", "bare", {
+      kind: "terminal",
+      slotIndex: 0,
+      terminalId: "ground",
+    });
+    expect(next.pigtails).toEqual([]);
+  });
+
+  it("removes a pigtail and prunes it when the nut is emptied", () => {
+    const withNut = addNutAndLand(drawing(), "loc_b", "cab_1", "bare");
+    const withLead = addPigtail(withNut, "loc_b", withNut.nuts[0]!.id, "bare", {
+      kind: "terminal",
+      slotIndex: 0,
+      terminalId: "ground",
+    });
+    const disconnected = removePigtail(withLead, withLead.pigtails[0]!.id);
+    expect(disconnected.pigtails).toEqual([]);
+    const empty = landConductor(withLead, "loc_b", "cab_1", "bare", null);
+    expect(empty.pigtails).toEqual([]);
+    expect(empty.nuts).toEqual([]);
   });
 });
 

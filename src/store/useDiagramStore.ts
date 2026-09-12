@@ -23,8 +23,10 @@ import {
 } from "../domain";
 import {
   addNutAndLand as applyNewNut,
+  addPigtail as applyAddPigtail,
   landConductor as applyLanding,
   pruneInternals,
+  removePigtail as applyRemovePigtail,
 } from "../domain/splices";
 import { PROJECT_VERSION } from "../domain/types";
 import type {
@@ -157,6 +159,13 @@ type DiagramState = {
     target: LandingTarget | null,
   ) => void;
   addNutAndLand: (locationId: string, cableId: string, conductor: ConductorColor) => void;
+  addPigtail: (
+    locationId: string,
+    nutId: string,
+    conductor: ConductorColor,
+    target: Extract<LandingTarget, { kind: "terminal" }>,
+  ) => void;
+  removePigtail: (pigtailId: string) => void;
 };
 
 function makeCable(
@@ -945,6 +954,16 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
   addNutAndLand: (locationId, cableId, conductor) => {
     const { library, project } = get();
     set(persist(library, applyNewNut(project, locationId, cableId, conductor)));
+  },
+
+  addPigtail: (locationId, nutId, conductor, target) => {
+    const { library, project } = get();
+    set(persist(library, applyAddPigtail(project, locationId, nutId, conductor, target)));
+  },
+
+  removePigtail: (pigtailId) => {
+    const { library, project } = get();
+    set(persist(library, applyRemovePigtail(project, pigtailId)));
   },
 
   connectCloud: async (auth) => {

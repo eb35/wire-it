@@ -122,5 +122,6 @@ describe("parseProject", () => {
     });
     expect(project.nuts).toEqual([]);
     expect(project.splices).toEqual([]);
+    expect(project.pigtails).toEqual([]);
   });
 });

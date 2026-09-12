@@ -7,6 +7,7 @@ import type {
   LandingTarget,
   Location,
   Nut,
+  Pigtail,
   Project,
   Splice,
 } from "./types";
@@ -116,6 +117,37 @@ export function suggestNutLabel(
   return String(used.size + 1);
 }
 
+function occupiesTerminal(
+  locationId: string,
+  target: Extract<LandingTarget, { kind: "terminal" }>,
+  item: { locationId: string; target: LandingTarget },
+): boolean {
+  return (
+    item.locationId === locationId &&
+    item.target.kind === "terminal" &&
+    item.target.slotIndex === target.slotIndex &&
+    item.target.terminalId === target.terminalId
+  );
+}
+
+function clearTerminal(
+  project: Project,
+  locationId: string,
+  target: Extract<LandingTarget, { kind: "terminal" }>,
+): { splices: Splice[]; pigtails: Pigtail[] } {
+  return {
+    splices: project.splices.filter((item) => !occupiesTerminal(locationId, target, item)),
+    pigtails: (project.pigtails ?? []).filter((item) => !occupiesTerminal(locationId, target, item)),
+  };
+}
+
+export function pigtailColor(project: Pick<Project, "splices">, nutId: string): ConductorColor {
+  const member = project.splices.find(
+    (item) => item.target.kind === "nut" && item.target.nutId === nutId,
+  );
+  return member?.conductor ?? "bare";
+}
+
 export function landConductor(
   project: Project,
   locationId: string,
@@ -124,23 +156,46 @@ export function landConductor(
   target: LandingTarget | null,
 ): Project {
   let splices = project.splices.filter((item) => !sameEnd(item, locationId, cableId, conductor));
+  let pigtails = project.pigtails ?? [];
 
   if (target?.kind === "terminal") {
-    splices = splices.filter(
-      (item) =>
-        !(
-          item.locationId === locationId &&
-          item.target.kind === "terminal" &&
-          item.target.slotIndex === target.slotIndex &&
-          item.target.terminalId === target.terminalId
-        ),
-    );
-    splices = [...splices, { locationId, cableId, conductor, target }];
+    const cleared = clearTerminal({ ...project, splices, pigtails }, locationId, target);
+    splices = [...cleared.splices, { locationId, cableId, conductor, target }];
+    pigtails = cleared.pigtails;
   } else if (target?.kind === "nut") {
     splices = [...splices, { locationId, cableId, conductor, target }];
   }
 
-  return pruneInternals({ ...project, splices });
+  return pruneInternals({ ...project, splices, pigtails });
+}
+
+export function addPigtail(
+  project: Project,
+  locationId: string,
+  nutId: string,
+  conductor: ConductorColor,
+  target: Extract<LandingTarget, { kind: "terminal" }>,
+): Project {
+  const cleared = clearTerminal(project, locationId, target);
+  const pigtail: Pigtail = {
+    id: createId("pig"),
+    locationId,
+    nutId,
+    conductor,
+    target,
+  };
+  return pruneInternals({
+    ...project,
+    splices: cleared.splices,
+    pigtails: [...cleared.pigtails, pigtail],
+  });
+}
+
+export function removePigtail(project: Project, pigtailId: string): Project {
+  return pruneInternals({
+    ...project,
+    pigtails: (project.pigtails ?? []).filter((item) => item.id !== pigtailId),
+  });
 }
 
 export function addNutAndLand(
@@ -170,6 +225,7 @@ export function pruneInternals(project: Project): Project {
 
   const nuts = (project.nuts ?? []).filter((item) => locationIds.has(item.locationId));
   const nutIds = new Set(nuts.map((item) => item.id));
+  const pigtailsIn = project.pigtails ?? [];
 
   const splices = (project.splices ?? []).filter((item) => {
     if (!locationIds.has(item.locationId)) return false;
@@ -190,10 +246,20 @@ export function pruneInternals(project: Project): Project {
     splices.flatMap((item) => (item.target.kind === "nut" ? [item.target.nutId] : [])),
   );
 
+  const pigtails = pigtailsIn.filter((item) => {
+    if (!locationIds.has(item.locationId) || !usedNuts.has(item.nutId)) return false;
+    const location = locations.get(item.locationId);
+    if (!location || location.kind !== "box") return false;
+    const slot = location.slots[item.target.slotIndex];
+    if (!slot) return false;
+    return terminalsFor(slot.device).some((terminal) => terminal.id === item.target.terminalId);
+  });
+
   return {
     ...project,
     nuts: nuts.filter((item) => usedNuts.has(item.id)),
     splices,
+    pigtails,
   };
 }
 
@@ -202,7 +268,7 @@ export function spliceRows(
   location: Location,
 ): { conductor: string; lands: string }[] {
   const codeOf = (id: string) => project.locations.find((item) => item.id === id)?.code ?? "?";
-  return conductorEndsAt(project, location.id).map((end) => {
+  const ends = conductorEndsAt(project, location.id).map((end) => {
     const dest = end.otherId
       ? `${end.cable.type} to ${codeOf(end.otherId)}${end.otherPort}`
       : `${end.cable.type} loose`;
@@ -218,4 +284,21 @@ export function spliceRows(
     const gang = location.slots.length > 1 ? `gang ${target.slotIndex + 1} ` : "";
     return { conductor, lands: `${gang}${terminal?.label ?? target.terminalId}` };
   });
+
+  const pigtails = (project.pigtails ?? [])
+    .filter((item) => item.locationId === location.id)
+    .map((item) => {
+      const nut = project.nuts.find((nut) => nut.id === item.nutId);
+      const slot = location.slots[item.target.slotIndex];
+      const terminal = slot
+        ? terminalsFor(slot.device).find((entry) => entry.id === item.target.terminalId)
+        : undefined;
+      const gang = location.slots.length > 1 ? `gang ${item.target.slotIndex + 1} ` : "";
+      return {
+        conductor: `Pigtail from nut ${nut?.label ?? "?"}`,
+        lands: `${gang}${terminal?.label ?? item.target.terminalId}`,
+      };
+    });
+
+  return [...ends, ...pigtails];
 }

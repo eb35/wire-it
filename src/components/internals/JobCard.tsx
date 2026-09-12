@@ -25,7 +25,7 @@ export function JobCard({ project, location }: { project: Project; location: Loc
           {device ? ` · ${device}` : ""}
         </span>
       </div>
-      <InternalsCanvas project={project} location={location} interactive={false} />
+      <InternalsCanvas project={project} location={location} interactive={false} variant="print" />
       <table className="w-full text-left text-xs" style={{ color: INK }}>
         <thead>
           <tr className="border-t" style={{ borderColor: STROKE, color: MUTED }}>
