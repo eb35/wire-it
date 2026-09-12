@@ -18,6 +18,9 @@ export function Inspector() {
   const updateNote = useDiagramStore((state) => state.updateNote);
   const resetRoute = useDiagramStore((state) => state.resetRoute);
   const deleteSelection = useDiagramStore((state) => state.deleteSelection);
+  const openBox = useDiagramStore((state) => state.openBox);
+  const closeBox = useDiagramStore((state) => state.closeBox);
+  const openBoxId = useDiagramStore((state) => state.openBoxId);
 
   const location =
     selection?.kind === "location"
@@ -44,7 +47,8 @@ export function Inspector() {
         <div className="flex flex-col gap-2">
           <h2 className="text-sm font-semibold">Inspector</h2>
           <p className="text-xs text-zinc-500">
-            Select a box, cable, or note. Click a cable to edit it: drag the blue end
+            Select a box, cable, or note. Double-click a box to land conductors on
+            terminals and wire-nuts. Click a cable to edit it: drag the blue end
             dots to another box or onto empty canvas, click a hollow mid-point to add a
             90° bend, and click × on a corner to remove it.
           </p>
@@ -54,6 +58,15 @@ export function Inspector() {
       {location ? (
         <div className="flex flex-col gap-3">
           <h2 className="text-sm font-semibold">{location.label}</h2>
+          {location.kind === "box" || location.kind === "external" ? (
+            <button
+              type="button"
+              className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-200 hover:bg-zinc-900"
+              onClick={() => (openBoxId === location.id ? closeBox() : openBox(location.id))}
+            >
+              {openBoxId === location.id ? "Back to floor plan" : "Open internals"}
+            </button>
+          ) : null}
           <label className="flex flex-col gap-1 text-xs text-zinc-500">
             Name
             <input

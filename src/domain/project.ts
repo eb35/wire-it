@@ -10,18 +10,24 @@ import {
   migrateLegacyKind,
   padSlots,
 } from "./location";
+import { pruneInternals } from "./splices";
 import { nextLocationCode } from "./ports";
 import type {
   BoxCapacity,
   BreakerSlot,
   Cable,
   CableTypeId,
+  ConductorColor,
   DeviceSlot,
   DeviceType,
+  LandingTarget,
   Location,
   Note,
+  Nut,
+  Pigtail,
   Point,
   Project,
+  Splice,
   WireColorId,
 } from "./types";
 import { PROJECT_VERSION, SUPPORTED_PROJECT_VERSIONS } from "./types";
@@ -54,6 +60,9 @@ export function emptyProject(name = "Untitled"): Project {
     locations: [],
     cables: [],
     notes: [],
+    nuts: [],
+    splices: [],
+    pigtails: [],
   };
 }
 
@@ -199,15 +208,107 @@ export function parseProject(raw: unknown): Project {
   });
 
   const { locations: nextLocations, cables } = attachPanelCables(locations, rawCables);
+  const nuts = parseNuts(raw.nuts);
+  const splices = parseSplices(raw.splices);
+  const pigtails = parsePigtails(raw.pigtails);
 
-  return {
+  return pruneInternals({
     version: PROJECT_VERSION,
     id: raw.id,
     name: raw.name,
     locations: nextLocations,
     cables,
     notes,
-  };
+    nuts,
+    splices,
+    pigtails,
+  });
+}
+
+function parseNuts(raw: unknown): Nut[] {
+  if (!Array.isArray(raw)) return [];
+  const nuts: Nut[] = [];
+  for (const item of raw) {
+    if (
+      !isRecord(item) ||
+      typeof item.id !== "string" ||
+      typeof item.locationId !== "string" ||
+      typeof item.label !== "string"
+    ) {
+      continue;
+    }
+    nuts.push({ id: item.id, locationId: item.locationId, label: item.label.trim() || "N" });
+  }
+  return nuts;
+}
+
+function parseLandingTarget(raw: unknown): LandingTarget | null {
+  if (!isRecord(raw) || typeof raw.kind !== "string") return null;
+  if (raw.kind === "nut" && typeof raw.nutId === "string") {
+    return { kind: "nut", nutId: raw.nutId };
+  }
+  if (
+    raw.kind === "terminal" &&
+    typeof raw.slotIndex === "number" &&
+    Number.isInteger(raw.slotIndex) &&
+    raw.slotIndex >= 0 &&
+    typeof raw.terminalId === "string"
+  ) {
+    return { kind: "terminal", slotIndex: raw.slotIndex, terminalId: raw.terminalId };
+  }
+  return null;
+}
+
+const CONDUCTORS = new Set<ConductorColor>(["black", "white", "red", "bare"]);
+
+function parsePigtails(raw: unknown): Pigtail[] {
+  if (!Array.isArray(raw)) return [];
+  const pigtails: Pigtail[] = [];
+  for (const item of raw) {
+    if (
+      !isRecord(item) ||
+      typeof item.id !== "string" ||
+      typeof item.locationId !== "string" ||
+      typeof item.nutId !== "string" ||
+      !CONDUCTORS.has(item.conductor as ConductorColor)
+    ) {
+      continue;
+    }
+    const target = parseLandingTarget(item.target);
+    if (!target || target.kind !== "terminal") continue;
+    pigtails.push({
+      id: item.id,
+      locationId: item.locationId,
+      nutId: item.nutId,
+      conductor: item.conductor as ConductorColor,
+      target,
+    });
+  }
+  return pigtails;
+}
+
+function parseSplices(raw: unknown): Splice[] {
+  if (!Array.isArray(raw)) return [];
+  const splices: Splice[] = [];
+  for (const item of raw) {
+    if (
+      !isRecord(item) ||
+      typeof item.locationId !== "string" ||
+      typeof item.cableId !== "string" ||
+      !CONDUCTORS.has(item.conductor as ConductorColor)
+    ) {
+      continue;
+    }
+    const target = parseLandingTarget(item.target);
+    if (!target) continue;
+    splices.push({
+      locationId: item.locationId,
+      cableId: item.cableId,
+      conductor: item.conductor as ConductorColor,
+      target,
+    });
+  }
+  return splices;
 }
 
 function panelNumber(port: string, handle: string): number | null {

@@ -1,6 +1,6 @@
-export const PROJECT_VERSION = 3 as const;
+export const PROJECT_VERSION = 4 as const;
 export const LEGACY_PROJECT_VERSION = 1 as const;
-export const SUPPORTED_PROJECT_VERSIONS = [1, 2, 3] as const;
+export const SUPPORTED_PROJECT_VERSIONS = [1, 2, 3, 4] as const;
 
 export type CableTypeId = "14/2" | "14/3" | "12/2" | "12/3" | "10/2" | "10/3";
 
@@ -82,6 +82,31 @@ export type Note = {
   position: Point;
 };
 
+export type LandingTarget =
+  | { kind: "terminal"; slotIndex: number; terminalId: string }
+  | { kind: "nut"; nutId: string };
+
+export type Splice = {
+  locationId: string;
+  cableId: string;
+  conductor: ConductorColor;
+  target: LandingTarget;
+};
+
+export type Nut = {
+  id: string;
+  locationId: string;
+  label: string;
+};
+
+export type Pigtail = {
+  id: string;
+  locationId: string;
+  nutId: string;
+  conductor: ConductorColor;
+  target: Extract<LandingTarget, { kind: "terminal" }>;
+};
+
 export type Project = {
   version: typeof PROJECT_VERSION;
   id: string;
@@ -89,6 +114,9 @@ export type Project = {
   locations: Location[];
   cables: Cable[];
   notes: Note[];
+  nuts: Nut[];
+  splices: Splice[];
+  pigtails: Pigtail[];
 };
 
 export type DrawingMeta = {

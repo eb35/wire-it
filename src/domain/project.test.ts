@@ -63,7 +63,7 @@ describe("parseProject", () => {
 
   it("migrates a v1 drawing to slots, gangs, and no fixture kind", () => {
     const project = parseProject(v1Kitchen);
-    expect(project.version).toBe(3);
+    expect(project.version).toBe(4);
     expect(project.locations.map((item) => item.kind)).toEqual(["panel", "box", "box"]);
     expect(project.locations[1]).toMatchObject({
       capacity: 1,
@@ -120,5 +120,8 @@ describe("parseProject", () => {
       target: "",
       looseEnd: { x: 180, y: 40 },
     });
+    expect(project.nuts).toEqual([]);
+    expect(project.splices).toEqual([]);
+    expect(project.pigtails).toEqual([]);
   });
 });

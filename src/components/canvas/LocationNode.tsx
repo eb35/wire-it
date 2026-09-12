@@ -178,6 +178,7 @@ function useLocationChrome(id: string) {
   const draggingCableEnd = useDiagramStore((state) => state.draggingCableEnd);
   const clickLocationForConnect = useDiagramStore((state) => state.clickLocationForConnect);
   const placeDevice = useDiagramStore((state) => state.placeDevice);
+  const openBox = useDiagramStore((state) => state.openBox);
   return {
     connectType,
     snapReady: Boolean(connectType || draggingCableEnd),
@@ -186,6 +187,11 @@ function useLocationChrome(id: string) {
       if (!connectType) return;
       event.stopPropagation();
       clickLocationForConnect(id);
+    },
+    onDoubleClick: (event: MouseEvent) => {
+      if (connectType) return;
+      event.stopPropagation();
+      openBox(id);
     },
     onDeviceDrop: (event: DragEvent, slotIndex?: number) => {
       const payload = parsePalette(event.dataTransfer.getData(PALETTE_MIME));
@@ -318,6 +324,8 @@ export function LocationNode({ id, data, selected }: NodeProps<Node<LocationNode
         className={`${frame} rounded-sm border-2 border-dashed border-amber-600/80 bg-zinc-900/50`}
         style={{ width: EXTERNAL_SIZE.width, height: EXTERNAL_SIZE.height }}
         onClick={chrome.onClick}
+        onDoubleClick={chrome.onDoubleClick}
+        title="Double-click to open internals"
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => chrome.onDeviceDrop(event)}
       >
@@ -332,7 +340,13 @@ export function LocationNode({ id, data, selected }: NodeProps<Node<LocationNode
 
   const size = boxSize(data.capacity);
   return (
-    <div className={frame} onClick={chrome.onClick} style={{ width: size.width }}>
+    <div
+      className={frame}
+      onClick={chrome.onClick}
+      onDoubleClick={chrome.onDoubleClick}
+      title="Double-click to open internals"
+      style={{ width: size.width }}
+    >
       <BoxHandles id={id} />
       <BoxBody
         capacity={data.capacity}

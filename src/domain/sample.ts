@@ -107,5 +107,7 @@ export function sampleKitchen(): Project {
         position: { x: 500, y: 220 },
       },
     ],
+    nuts: [],
+    splices: [],
   };
 }
