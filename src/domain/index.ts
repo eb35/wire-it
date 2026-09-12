@@ -1,4 +1,5 @@
 export * from "./catalog";
+export * from "./exportSvg";
 export * from "./handles";
 export * from "./id";
 export * from "./label";

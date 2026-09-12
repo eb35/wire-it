@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cableOnWireText, markOffsets } from "./label";
+import { cableOnWireText, labelPlacement, markOffsets } from "./label";
 
 describe("cableOnWireText", () => {
   it("shows only the type when the label is empty", () => {
@@ -12,7 +12,17 @@ describe("cableOnWireText", () => {
       "12/2 from brk 29",
     );
   });
+});
 
+describe("labelPlacement", () => {
+  it("keeps end labels upright along a leftward run", () => {
+    const placed = labelPlacement({ x: 100, y: 40 }, { x: 20, y: 40 });
+    expect(placed.angle % 360).toBe(0);
+    expect(placed.point.y).not.toBe(40);
+  });
+});
+
+describe("markOffsets", () => {
   it("spaces on-wire marks farther apart than the old dense repeat", () => {
     expect(markOffsets("12/2", 400)).toEqual([56, 216]);
     expect(markOffsets("12/2 This wire needs to be replaced", 500).length).toBeLessThan(4);

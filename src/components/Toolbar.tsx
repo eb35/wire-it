@@ -2,8 +2,8 @@ import { UserButton } from "@clerk/clerk-react";
 import { useRef, useState } from "react";
 import { parseProject } from "../domain/project";
 import { clerkEnabled } from "../lib/clerk";
+import { exportDiagramPng, exportDiagramSvg, type ExportTheme } from "../lib/exportDiagram";
 import { downloadJson } from "../lib/downloadJson";
-import { exportFlowPng, type ExportTheme } from "../lib/exportPng";
 import { useDiagramStore, type SaveStatus } from "../store/useDiagramStore";
 
 export function Toolbar() {
@@ -19,10 +19,11 @@ export function Toolbar() {
   const [exportOpen, setExportOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handlePng(theme: ExportTheme) {
+  async function handleExport(kind: "svg" | "png", theme: ExportTheme) {
     setError(null);
     try {
-      await exportFlowPng(project.name, theme);
+      if (kind === "svg") exportDiagramSvg(project, theme);
+      else await exportDiagramPng(project, theme);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Export failed.");
     }
@@ -81,7 +82,7 @@ export function Toolbar() {
           Export
         </button>
         {exportOpen ? (
-          <div className="absolute right-0 z-20 mt-1 w-44 rounded border border-zinc-700 bg-zinc-900 py-1 text-xs">
+          <div className="absolute right-0 z-20 mt-1 w-48 rounded border border-zinc-700 bg-zinc-900 py-1 text-xs">
             <button
               type="button"
               className="block w-full px-3 py-1.5 text-left hover:bg-zinc-800"
@@ -95,14 +96,28 @@ export function Toolbar() {
             <button
               type="button"
               className="block w-full px-3 py-1.5 text-left hover:bg-zinc-800"
-              onClick={() => void handlePng("dark")}
+              onClick={() => void handleExport("svg", "dark")}
+            >
+              SVG — dark
+            </button>
+            <button
+              type="button"
+              className="block w-full px-3 py-1.5 text-left hover:bg-zinc-800"
+              onClick={() => void handleExport("svg", "light")}
+            >
+              SVG — light
+            </button>
+            <button
+              type="button"
+              className="block w-full px-3 py-1.5 text-left hover:bg-zinc-800"
+              onClick={() => void handleExport("png", "dark")}
             >
               PNG — dark
             </button>
             <button
               type="button"
               className="block w-full px-3 py-1.5 text-left hover:bg-zinc-800"
-              onClick={() => void handlePng("light")}
+              onClick={() => void handleExport("png", "light")}
             >
               PNG — light
             </button>

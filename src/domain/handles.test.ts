@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { landingsForLocation, pickConnection, uniqueBoxHandle } from "./handles";
+import { landingPoint, landingsForLocation, pickConnection, uniqueBoxHandle } from "./handles";
 import { emptySlots, defaultBreakers } from "./location";
 import type { Cable, Location } from "./types";
 
@@ -44,6 +44,22 @@ describe("landingsForLocation", () => {
     const keys = landings.map((landing) => `${landing.cableId}-${landing.role}`);
     expect(keys).toEqual(["cab_a-source", "cab_b-source"]);
     expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
+describe("landingPoint", () => {
+  it("puts a panel breaker on that row, not the box midline", () => {
+    const panel: Location = {
+      ...box("panel", 40, 80),
+      kind: "panel",
+      spaces: 12,
+      breakers: defaultBreakers(12),
+    };
+    const first = landingPoint(panel, "s-brk-1");
+    const fifth = landingPoint(panel, "s-brk-5");
+    expect(first.x).toBe(40);
+    expect(fifth.x).toBe(40);
+    expect(fifth.y).toBeGreaterThan(first.y);
   });
 });
 
