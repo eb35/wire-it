@@ -1,15 +1,18 @@
 import { useMemo, useRef, useState, type PointerEvent } from "react";
 import { resolveCableColor } from "../../domain/catalog";
 import {
-  conductorPath,
   jacketExits,
   laneXs,
   nutApproach,
+  pathFromPoints,
+  routeToHandle,
   terminalHandle,
+  type DeviceRect,
+  type RouteKind,
 } from "../../domain/internalsRoute";
 import { wireEndParts } from "../../domain/ports";
 import { cablesAtLocation, conductorEndsAt, pigtailColor } from "../../domain/splices";
-import { terminalsFor, type TerminalDef } from "../../domain/terminals";
+import { terminalsFor, type TerminalDef, type TerminalSide } from "../../domain/terminals";
 import type { ConductorColor, Location, Project } from "../../domain/types";
 import { useDiagramStore } from "../../store/useDiagramStore";
 import {
@@ -59,6 +62,7 @@ type ScrewHit = {
   kind: "terminal";
   slotIndex: number;
   terminalId: string;
+  side: TerminalSide;
   cx: number;
   cy: number;
 };
@@ -214,6 +218,33 @@ export function InternalsCanvas({
         </g>
       ))}
 
+      {layout.runs.map((run) => {
+        const tip = tipOf(run.key, run.handle);
+        const dest = drag && run.key === dragKey(drag) ? tip : run.handle;
+        const d = pathFromPoints(routeToHandle(run.exit, dest, run.laneX, run.routeKind, run.device));
+        return (
+          <WireStroke key={run.key} d={d} conductor={run.conductor} theme={theme} variant={variant} />
+        );
+      })}
+
+      {interactive
+        ? layout.spares.map((spare) => {
+            const key = `new:${spare.nutId}`;
+            const dragging = drag?.kind === "pigtail" && !drag.pigtailId && drag.nutId === spare.nutId;
+            if (!dragging) return null;
+            const tip = tipOf(key, spare.handle);
+            return (
+              <WireStroke
+                key={key}
+                d={pathFromPoints(routeToHandle(spare.exit, tip, spare.laneX, "nut"))}
+                conductor={spare.conductor}
+                theme={theme}
+                variant={variant}
+              />
+            );
+          })
+        : null}
+
       {layout.devices.map((device) => (
         <DeviceBody key={device.slotIndex} device={device} theme={theme} />
       ))}
@@ -259,50 +290,46 @@ export function InternalsCanvas({
 
       {layout.runs.map((run) => {
         const tip = tipOf(run.key, run.handle);
-        const dest = drag && run.key === dragKey(drag) ? tip : run.dest;
-        const d = conductorPath(run.exit, dest, run.laneX);
         return (
-          <g key={run.key}>
-            <WireStroke d={d} conductor={run.conductor} theme={theme} variant={variant} />
-            <Tip
-              x={tip.x}
-              y={tip.y}
-              conductor={run.conductor}
-              theme={theme}
-              variant={variant}
-              interactive={interactive}
-              onPointerDown={(event) => {
-                const point = svgRef.current
-                  ? svgCoords(svgRef.current, event.clientX, event.clientY)
-                  : tip;
-                if (run.kind === "pigtail") {
-                  beginDrag(event, {
-                    kind: "pigtail",
-                    pigtailId: run.pigtailId,
-                    nutId: run.nutId,
-                    conductor: run.conductor,
-                    x: point.x,
-                    y: point.y,
-                    originX: point.x,
-                    originY: point.y,
-                    moved: false,
-                  });
-                  return;
-                }
+          <Tip
+            key={run.key}
+            x={tip.x}
+            y={tip.y}
+            conductor={run.conductor}
+            theme={theme}
+            variant={variant}
+            interactive={interactive}
+            onPointerDown={(event) => {
+              const point = svgRef.current
+                ? svgCoords(svgRef.current, event.clientX, event.clientY)
+                : tip;
+              if (run.kind === "pigtail") {
                 beginDrag(event, {
-                  kind: "conductor",
-                  cableId: run.cableId,
+                  kind: "pigtail",
+                  pigtailId: run.pigtailId,
+                  nutId: run.nutId,
                   conductor: run.conductor,
-                  landed: run.landed,
                   x: point.x,
                   y: point.y,
                   originX: point.x,
                   originY: point.y,
                   moved: false,
                 });
-              }}
-            />
-          </g>
+                return;
+              }
+              beginDrag(event, {
+                kind: "conductor",
+                cableId: run.cableId,
+                conductor: run.conductor,
+                landed: run.landed,
+                x: point.x,
+                y: point.y,
+                originX: point.x,
+                originY: point.y,
+                moved: false,
+              });
+            }}
+          />
         );
       })}
 
@@ -311,42 +338,32 @@ export function InternalsCanvas({
             const key = `new:${spare.nutId}`;
             const tip = tipOf(key, spare.handle);
             const dragging = drag?.kind === "pigtail" && !drag.pigtailId && drag.nutId === spare.nutId;
-            const dest = dragging ? tip : spare.handle;
             return (
-              <g key={key}>
-                {dragging ? (
-                  <WireStroke
-                    d={conductorPath(spare.exit, dest, spare.laneX)}
-                    conductor={spare.conductor}
-                    theme={theme}
-                    variant={variant}
-                  />
-                ) : null}
-                <Tip
-                  x={tip.x}
-                  y={tip.y}
-                  conductor={spare.conductor}
-                  theme={theme}
-                  variant={variant}
-                  interactive
-                  spare={!dragging}
-                  onPointerDown={(event) => {
-                    const point = svgRef.current
-                      ? svgCoords(svgRef.current, event.clientX, event.clientY)
-                      : tip;
-                    beginDrag(event, {
-                      kind: "pigtail",
-                      nutId: spare.nutId,
-                      conductor: spare.conductor,
-                      x: point.x,
-                      y: point.y,
-                      originX: point.x,
-                      originY: point.y,
-                      moved: false,
-                    });
-                  }}
-                />
-              </g>
+              <Tip
+                key={key}
+                x={tip.x}
+                y={tip.y}
+                conductor={spare.conductor}
+                theme={theme}
+                variant={variant}
+                interactive
+                spare={!dragging}
+                onPointerDown={(event) => {
+                  const point = svgRef.current
+                    ? svgCoords(svgRef.current, event.clientX, event.clientY)
+                    : tip;
+                  beginDrag(event, {
+                    kind: "pigtail",
+                    nutId: spare.nutId,
+                    conductor: spare.conductor,
+                    x: point.x,
+                    y: point.y,
+                    originX: point.x,
+                    originY: point.y,
+                    moved: false,
+                  });
+                }}
+              />
             );
           })
         : null}
@@ -606,9 +623,10 @@ type Run = {
   conductor: ConductorColor;
   landed: boolean;
   exit: { x: number; y: number };
-  dest: { x: number; y: number };
   handle: { x: number; y: number };
   laneX: number;
+  routeKind: RouteKind;
+  device?: DeviceRect;
 };
 
 function buildLayout(project: Project, location: Location) {
@@ -657,6 +675,7 @@ function buildLayout(project: Project, location: Location) {
         kind: "terminal",
         slotIndex: device.slotIndex,
         terminalId: terminal.id,
+        side: terminal.side,
         ...point,
       });
     }
@@ -681,8 +700,14 @@ function buildLayout(project: Project, location: Location) {
   const incomingCount = jackets.reduce((sum, jacket) => {
     return sum + ends.filter((end) => end.cableId === jacket.cable.id).length;
   }, 0);
-  const lanes = laneXs(incomingCount + pigtails.length + Math.max(nuts.length, 1), 148);
+  const gutterEnd = (devices[0]?.x ?? 380) - 28;
+  const lanes = laneXs(incomingCount + pigtails.length + Math.max(nuts.length, 1), 148, gutterEnd);
   let laneIndex = 0;
+
+  function deviceRect(slotIndex: number): DeviceRect | undefined {
+    const device = devices.find((item) => item.slotIndex === slotIndex);
+    return device ? { x: device.x, y: device.y, width: DEVICE_W, height: DEVICE_H } : undefined;
+  }
 
   const runs: Run[] = [];
 
@@ -706,9 +731,9 @@ function buildLayout(project: Project, location: Location) {
           conductor: end.conductor,
           landed: false,
           exit,
-          dest: { x: exit.x + 52, y: exit.y },
           handle: { x: exit.x + 52, y: exit.y },
           laneX,
+          routeKind: "stub",
         });
         return;
       }
@@ -717,7 +742,9 @@ function buildLayout(project: Project, location: Location) {
         const screw = screws.find(
           (item) => item.slotIndex === target.slotIndex && item.terminalId === target.terminalId,
         );
-        const dest = screw ? { x: screw.cx, y: screw.cy } : { x: exit.x + 52, y: exit.y };
+        const handle = screw
+          ? terminalHandle({ x: screw.cx, y: screw.cy }, screw.side)
+          : { x: exit.x + 52, y: exit.y };
         runs.push({
           key,
           kind: "conductor",
@@ -726,16 +753,17 @@ function buildLayout(project: Project, location: Location) {
           conductor: end.conductor,
           landed: true,
           exit,
-          dest,
-          handle: screw ? terminalHandle({ x: screw.cx, y: screw.cy }, laneX) : dest,
+          handle,
           laneX,
+          routeKind: screw?.side ?? "left",
+          device: deviceRect(target.slotIndex),
         });
         return;
       }
       const nutId = end.splice.target.nutId;
       const nut = nuts.find((item) => item.nutId === nutId);
       const group = members.get(nutId) ?? [];
-      const dest = nut
+      const handle = nut
         ? nutApproach({ x: nut.cx, y: nut.cy }, group.indexOf(key), group.length)
         : { x: exit.x + 52, y: exit.y };
       runs.push({
@@ -746,9 +774,10 @@ function buildLayout(project: Project, location: Location) {
         conductor: end.conductor,
         landed: true,
         exit,
-        dest,
-        handle: dest,
+        handle,
         laneX,
+        routeKind: "nut",
+        device: devices[0] ? { x: devices[0].x, y: devices[0].y, width: DEVICE_W, height: DEVICE_H } : undefined,
       });
     });
   }
@@ -762,7 +791,9 @@ function buildLayout(project: Project, location: Location) {
     const laneX = lanes[laneIndex] ?? 148;
     laneIndex += 1;
     const exit = nut ? { x: nut.cx, y: nut.cy - 16 } : { x: 200, y: nutY };
-    const dest = screw ? { x: screw.cx, y: screw.cy } : { x: exit.x, y: exit.y - 40 };
+    const handle = screw
+      ? terminalHandle({ x: screw.cx, y: screw.cy }, screw.side)
+      : { x: exit.x, y: exit.y - 40 };
     runs.push({
       key: pigtail.id,
       kind: "pigtail",
@@ -772,9 +803,10 @@ function buildLayout(project: Project, location: Location) {
       conductor: pigtail.conductor,
       landed: true,
       exit,
-      dest,
-      handle: screw ? terminalHandle({ x: screw.cx, y: screw.cy }, laneX) : dest,
+      handle,
       laneX,
+      routeKind: screw?.side ?? "top",
+      device: deviceRect(pigtail.target.slotIndex),
     });
   }
 
